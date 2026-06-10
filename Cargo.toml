@@ -1,0 +1,35 @@
+[package]
+name = "norma"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gpui = { version = "*" }
+
+[package.metadata.bundle]
+name = "norma"
+identifier = "com.lyonmu.norma"
+version = "0.1.0"
+icon = ["icons/icon.icns"]
+category = "Agent"
+short_description = "cross-platform Agent"
+long_description = """
+Norma is a cross-platform desktop agent built with GPUI, 
+featuring multi-model support, MCP integration, Skills, ACP communication, and collaborative multi-agent workflows.
+"""
+
+[package.metadata.deb]
+maintainer = "lyonmu <lyonmu@foxmail.com>"
+copyright = "2026, lyonmu <lyonmu@foxmail.com>"
+license-file = ["LICENSE", "4"]
+extended-description = """\
+Norma is a cross-platform desktop agent built with GPUI, 
+featuring multi-model support, MCP integration, Skills, ACP communication, and collaborative multi-agent workflows.
+"""
+depends = "$auto"
+section = "devel"
+priority = "optional"
+assets = [
+    ["target/release/norma", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/norma/README", "644"],
+]
