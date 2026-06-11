@@ -1,6 +1,7 @@
 use std::env;
 
 use crate::agent::{AgentRuntime, MockAgentRuntime};
+use crate::config::AppConfig;
 use crate::git::{GitStatusSummary, read_status};
 use crate::session::{SessionState, sample_thread};
 use crate::workspace::{FileNode, Project, load_file_tree, open_project, sample_file_tree};
@@ -21,6 +22,7 @@ pub struct NormaAppState {
     pub files: Vec<FileNode>,
     pub git: GitStatusSummary,
     pub session: SessionState,
+    pub config: AppConfig,
 }
 
 impl NormaAppState {
@@ -46,6 +48,7 @@ impl NormaAppState {
             files: Vec::new(),
             git: GitStatusSummary::unavailable("no project open"),
             session: SessionState::new(sample_thread()),
+            config: AppConfig::sample(),
         }
     }
 
@@ -67,6 +70,7 @@ impl NormaAppState {
                     files: sample_file_tree(),
                     git: GitStatusSummary::unavailable("project could not be opened"),
                     session: SessionState::new(sample_thread()),
+                    config: AppConfig::sample(),
                 };
             }
         };
@@ -85,6 +89,7 @@ impl NormaAppState {
             files,
             git,
             session,
+            config: AppConfig::sample(),
         }
     }
 }
@@ -109,5 +114,19 @@ mod tests {
         ));
         assert!(state.files.is_empty());
         assert!(!state.git.is_repository);
+    }
+
+    #[test]
+    fn app_state_includes_preview_provider_config() {
+        let state = NormaAppState::no_project();
+        assert_eq!(state.config.providers.len(), 2);
+        assert_eq!(state.config.selected_provider().unwrap().name, "OpenAI 默认");
+    }
+
+    #[test]
+    fn settings_config_is_separate_from_session_events() {
+        let state = NormaAppState::no_project();
+        assert!(state.session.events.is_empty());
+        assert!(!state.config.providers.is_empty());
     }
 }
