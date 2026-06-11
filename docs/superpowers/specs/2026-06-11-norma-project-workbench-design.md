@@ -6,7 +6,7 @@ Date: 2026-06-11
 
 Norma V1 is a project-session desktop agent workbench built with Rust and GPUI. It should feel close to Codex: calm, native, thread-based, evidence-oriented, and focused on helping developers understand what the agent did.
 
-The first implementation is intentionally scoped to a UI shell with real local project context. It opens a project, shows project files and Git status, lets the user create project threads, renders a Codex-style execution stream, and uses a mock agent runtime to produce traceable events. It does not call real models, modify code, run destructive commands, or implement the full README feature set yet.
+The first implementation is intentionally scoped to a UI shell with real local project context. It opens a project, shows project files and Git status, lets the developer create project threads, renders a Codex-style execution stream, and uses a mock agent runtime to produce traceable events. It does not call real models, modify code, run destructive commands, or implement the full README feature set yet.
 
 Selected visual direction: **Review-First Codex Workbench**.
 
@@ -99,7 +99,7 @@ Required visual qualities:
 
 The V1 screen should include these areas from the selected design:
 
-- Top toolbar: Norma brand, back/forward navigation affordances, model selector, runtime/environment selector, local status indicator, safety level control, run/continue action, notification icon, settings icon, and user/avatar placeholder.
+- Top toolbar: Norma brand, back/forward navigation affordances, model selector, runtime/environment selector, local status indicator, safety level control, run/continue action, notification icon, and settings icon. Do not include account, profile, or avatar controls.
 - Left sidebar: current project card, grouped thread list by recency, project files tree, refresh/more actions, and Git status card with branch, changed/added/deleted counts, and ahead/behind summary.
 - Center work stream: task title with edit affordance, task summary block with goal/constraints/status, vertical execution timeline, completed step cards, active step card, pending step card, and bottom input composer.
 - Right inspector: top tabs for inspector/context/output/settings, active inspector underline, change overview metrics, safety check row, changed files list with filters/view controls, selected file change preview with hunk summaries, and Git operation rows.
@@ -136,13 +136,14 @@ The top toolbar is part of V1's visual contract even if some controls are mock o
 - primary run or continue icon button
 - notification icon
 - settings icon
-- user/avatar placeholder
+
+Norma is an open-source local agent and has no user-account concept in V1. The top-right area is reserved for runtime actions, notifications, and settings. It must not show a user avatar, profile menu, account switcher, sign-in state, or personal workspace affordance.
 
 Toolbar controls should be compact and quiet. They should not dominate the page or look like a settings dashboard.
 
 ### Empty And Initial State
 
-When no project is open, Norma should keep the same shell proportions but show a simple project-open state in the center and an inactive inspector. After a project is open but before a thread exists, the center should guide the user to create a task thread while the left sidebar can already show files and Git status.
+When no project is open, Norma should keep the same shell proportions but show a simple project-open state in the center and an inactive inspector. After a project is open but before a thread exists, the center should guide the developer to create a task thread while the left sidebar can already show files and Git status.
 
 ### Left Sidebar
 
@@ -170,7 +171,7 @@ The sidebar should use row selection, small labels, and separators rather than i
 
 The center is not a chat bubble UI. It is a task thread that shows what happened:
 
-- user task
+- developer request
 - agent plan
 - tool call started/finished events
 - command output summaries
@@ -179,7 +180,7 @@ The center is not a chat bubble UI. It is a task thread that shows what happened
 - final response
 - error events
 
-Events should be compact, chronologically ordered, and easy to scan. Details can be collapsed, but the user should always understand the agent's next step and current state.
+Events should be compact, chronologically ordered, and easy to scan. Details can be collapsed, but the developer should always understand the agent's next step and current state.
 
 The reference center stream has these required pieces:
 
@@ -273,7 +274,7 @@ Allowed in V1:
 
 Not allowed in V1:
 
-- discard user changes
+- discard manual working-tree changes
 - reset files
 - apply patches
 - checkout files
@@ -305,7 +306,7 @@ The exact names can evolve, but the design should preserve these boundaries:
 - `ChangedFile`: path, status, inserted lines, deleted lines, hunk count.
 - `DiffHunkSummary`: hunk index, line range, inserted lines, deleted lines, collapsed/expanded state.
 - `SessionThread`: id, project id, title, created/updated timestamps.
-- `SessionEvent`: user message, agent plan, tool call, command output, change summary, final response, error.
+- `SessionEvent`: request message, agent plan, tool call, command output, change summary, final response, error.
 - `InspectorMode`: context, changes, approval.
 - `AgentRuntime`: trait that streams session events.
 - `MockAgentRuntime`: deterministic V1 implementation.
@@ -326,13 +327,13 @@ Global modal errors should be rare. Most failures belong in the project sidebar,
 
 ## Safety Boundaries
 
-V1 must not modify user files. `MockAgentRuntime` cannot write files or execute destructive commands.
+V1 must not modify project files. `MockAgentRuntime` cannot write files or execute destructive commands.
 
 Future destructive actions need explicit confirmation and must show:
 
 - affected files
 - line or hunk counts where available
-- whether the action can discard user edits
+- whether the action can discard manual edits
 - whether the action applies to one file, one thread, or the whole working tree
 
 Git operations should be designed as explicit requests first, then implemented behind safe handlers later. No hidden `git reset` or destructive cleanup should be introduced.
@@ -426,7 +427,7 @@ Manual visual verification checklist:
 - Agent change grouping.
 - Per-file and per-hunk review.
 - Undo last agent change.
-- Safer rollback model that distinguishes agent changes from user changes.
+- Safer rollback model that distinguishes agent changes from manual working-tree changes.
 
 ### V2: Extensible Agent Platform
 
