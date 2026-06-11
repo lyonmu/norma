@@ -5,9 +5,20 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.102"
+config = "0.15.23"
+flate2 = "1.1.9"
 gpui = "0.2.2"
 ignore = "0.4.26"
+notify = "9.0.0-rc.4"
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "1.1.2"
 thiserror = "2.0.18"
+tracing = "0.1.44"
+tracing-appender = "0.2.5"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
 
 [package.metadata.bundle]
 name = "norma"
