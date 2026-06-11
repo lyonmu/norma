@@ -1,3 +1,9 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsSection {
     General,
@@ -167,9 +173,183 @@ pub fn mask_secret(secret: &str) -> String {
     format!("••••••••••••{visible_tail}")
 }
 
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("failed to read config {path}: {source}")]
+    Read {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("failed to write config {path}: {source}")]
+    Write {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("failed to parse config {path}: {source}")]
+    Parse {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
+    #[error("failed to serialize default config: {0}")]
+    Serialize(toml::ser::Error),
+    #[error("invalid config: {0}")]
+    Invalid(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NormaConfig {
+    pub window: WindowConfig,
+    pub paths: PathsConfig,
+    pub logging: LoggingConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WindowConfig {
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PathsConfig {
+    pub data_dir: String,
+    pub log_dir: String,
+    pub skills_dir: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LoggingConfig {
+    pub level: String,
+    pub format: String,
+    pub max_file_size_mb: u64,
+    pub maintenance_interval_hours: u64,
+    pub retention_days: u64,
+    pub compress_rotated: bool,
+}
+
+impl NormaConfig {
+    pub fn default_for(paths: &crate::paths::NormaPaths) -> Self {
+        Self {
+            window: WindowConfig {
+                width: 1440,
+                height: 1024,
+            },
+            paths: PathsConfig {
+                data_dir: paths.data_dir.display().to_string(),
+                log_dir: paths.log_dir.display().to_string(),
+                skills_dir: paths.skills_dir.display().to_string(),
+            },
+            logging: LoggingConfig {
+                level: "info".to_string(),
+                format: "json".to_string(),
+                max_file_size_mb: 10,
+                maintenance_interval_hours: 24,
+                retention_days: 7,
+                compress_rotated: true,
+            },
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        let valid_level = matches!(
+            self.logging.level.as_str(),
+            "trace" | "debug" | "info" | "warn" | "error"
+        );
+        if !valid_level {
+            return Err(ConfigError::Invalid(format!(
+                "logging.level must be trace, debug, info, warn, or error; got {}",
+                self.logging.level
+            )));
+        }
+        if self.logging.format != "json" {
+            return Err(ConfigError::Invalid(format!(
+                "logging.format must be json; got {}",
+                self.logging.format
+            )));
+        }
+        if self.logging.max_file_size_mb == 0 {
+            return Err(ConfigError::Invalid(
+                "logging.max_file_size_mb must be greater than zero".to_string(),
+            ));
+        }
+        if self.logging.maintenance_interval_hours == 0 {
+            return Err(ConfigError::Invalid(
+                "logging.maintenance_interval_hours must be greater than zero".to_string(),
+            ));
+        }
+        if self.logging.retention_days == 0 {
+            return Err(ConfigError::Invalid(
+                "logging.retention_days must be greater than zero".to_string(),
+            ));
+        }
+        if self.window.width == 0 || self.window.height == 0 {
+            return Err(ConfigError::Invalid(
+                "window width and height must be greater than zero".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+pub fn ensure_config(paths: &crate::paths::NormaPaths) -> Result<NormaConfig, ConfigError> {
+    if !paths.config_file.exists() {
+        let config = NormaConfig::default_for(paths);
+        write_config(&paths.config_file, &config)?;
+    }
+    load_config_with_env(&paths.config_file)
+}
+
+pub fn load_config(path: impl AsRef<Path>) -> Result<NormaConfig, ConfigError> {
+    let path = path.as_ref();
+    let content = fs::read_to_string(path).map_err(|source| ConfigError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let config: NormaConfig = toml::from_str(&content).map_err(|source| ConfigError::Parse {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    config.validate()?;
+    Ok(config)
+}
+
+pub fn write_config(path: impl AsRef<Path>, config: &NormaConfig) -> Result<(), ConfigError> {
+    let path = path.as_ref();
+    let content = toml::to_string_pretty(config).map_err(ConfigError::Serialize)?;
+    fs::write(path, content).map_err(|source| ConfigError::Write {
+        path: path.to_path_buf(),
+        source,
+    })
+}
+
+pub fn load_config_with_env(path: impl AsRef<Path>) -> Result<NormaConfig, ConfigError> {
+    let path = path.as_ref();
+    let settings = config::Config::builder()
+        .add_source(config::File::from(path).format(config::FileFormat::Toml))
+        .add_source(
+            config::Environment::with_prefix("NORMA")
+                .separator("__")
+                .try_parsing(true),
+        )
+        .build()
+        .map_err(|error| ConfigError::Invalid(error.to_string()))?;
+    let config: NormaConfig = settings
+        .try_deserialize()
+        .map_err(|error| ConfigError::Invalid(error.to_string()))?;
+    config.validate()?;
+    Ok(config)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paths::NormaPaths;
+    use std::fs;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn settings_sections_match_design_order() {
@@ -233,5 +413,69 @@ mod tests {
         let selected = config.selected_provider().unwrap();
         assert_eq!(selected.name, "OpenAI 默认");
         assert_eq!(selected.protocol, ProviderProtocol::OpenAi);
+    }
+
+    #[test]
+    fn writes_default_config_on_first_launch() {
+        let _guard = env_lock().lock().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let paths = NormaPaths::from_home(root.path());
+        paths.create_all().unwrap();
+
+        let config = ensure_config(&paths).unwrap();
+
+        assert_eq!(config.logging.level, "info");
+        assert_eq!(config.logging.max_file_size_mb, 10);
+        assert!(paths.config_file.is_file());
+        let content = fs::read_to_string(&paths.config_file).unwrap();
+        assert!(content.contains("[logging]"));
+        assert!(content.contains("retention_days = 7"));
+    }
+
+    #[test]
+    fn loads_valid_config_file() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = NormaPaths::from_home(root.path());
+        paths.create_all().unwrap();
+        let mut config = NormaConfig::default_for(&paths);
+        config.logging.level = "debug".to_string();
+        write_config(&paths.config_file, &config).unwrap();
+
+        let loaded = load_config(&paths.config_file).unwrap();
+
+        assert_eq!(loaded.logging.level, "debug");
+    }
+
+    #[test]
+    fn rejects_invalid_log_level() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = NormaPaths::from_home(root.path());
+        paths.create_all().unwrap();
+        let mut config = NormaConfig::default_for(&paths);
+        config.logging.level = "verbose".to_string();
+        write_config(&paths.config_file, &config).unwrap();
+
+        let error = load_config(&paths.config_file).unwrap_err();
+
+        assert!(error.to_string().contains("logging.level"));
+    }
+
+    #[test]
+    fn applies_norma_environment_overrides() {
+        let _guard = env_lock().lock().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let paths = NormaPaths::from_home(root.path());
+        paths.create_all().unwrap();
+        write_config(&paths.config_file, &NormaConfig::default_for(&paths)).unwrap();
+
+        unsafe {
+            std::env::set_var("NORMA__LOGGING__LEVEL", "warn");
+        }
+        let loaded = load_config_with_env(&paths.config_file).unwrap();
+        unsafe {
+            std::env::remove_var("NORMA__LOGGING__LEVEL");
+        }
+
+        assert_eq!(loaded.logging.level, "warn");
     }
 }
