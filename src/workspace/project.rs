@@ -19,11 +19,13 @@ pub struct Project {
 pub fn open_project(path: impl AsRef<Path>) -> Result<Project, WorkspaceError> {
     let root = path.as_ref().to_path_buf();
     if !root.exists() {
-        tracing::warn!(component = "workspace", root = %root.display(), "project path missing");
+        let error = WorkspaceError::MissingPath(root.clone());
+        tracing::warn!(component = "workspace", root = %root.display(), error = %error, "project open failed");
         return Err(WorkspaceError::MissingPath(root));
     }
     if !root.is_dir() {
-        tracing::warn!(component = "workspace", root = %root.display(), "project path not directory");
+        let error = WorkspaceError::NotDirectory(root.clone());
+        tracing::warn!(component = "workspace", root = %root.display(), error = %error, "project open failed");
         return Err(WorkspaceError::NotDirectory(root));
     }
     let name = root

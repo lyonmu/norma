@@ -10,3 +10,9 @@ pub use app::{
 pub use file::{ensure_config, load_config, load_config_with_env, write_config};
 pub use model::{ConfigError, LoggingConfig, NormaConfig, PathsConfig, WindowConfig};
 pub use reload::{ConfigReload, ConfigState, is_config_path_event};
+
+#[cfg(test)]
+pub(crate) fn env_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}

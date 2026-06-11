@@ -83,16 +83,10 @@ mod tests {
     use super::*;
     use crate::paths::NormaPaths;
     use std::fs;
-    use std::sync::{Mutex, OnceLock};
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     #[test]
     fn writes_default_config_on_first_launch() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = crate::config::env_lock().lock().unwrap();
         let root = tempfile::tempdir().unwrap();
         let paths = NormaPaths::from_home(root.path());
         paths.create_all().unwrap();
@@ -137,7 +131,7 @@ mod tests {
 
     #[test]
     fn applies_norma_environment_overrides() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = crate::config::env_lock().lock().unwrap();
         let root = tempfile::tempdir().unwrap();
         let paths = NormaPaths::from_home(root.path());
         paths.create_all().unwrap();

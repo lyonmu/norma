@@ -72,7 +72,12 @@ fn debounce_config_events(
             }
             Ok(Ok(_)) => {}
             Ok(Err(error)) => {
-                let _ = updates.send(RuntimeUpdate::ConfigRejected(error.to_string()));
+                if updates
+                    .send(RuntimeUpdate::ConfigRejected(error.to_string()))
+                    .is_err()
+                {
+                    tracing::warn!(component = "runtime", "runtime update receiver dropped");
+                }
             }
             Err(RecvTimeoutError::Timeout) if pending && last_event.elapsed() >= debounce => {
                 pending = false;
@@ -84,7 +89,9 @@ fn debounce_config_events(
                     ConfigReload::Applied(config) => RuntimeUpdate::ConfigApplied(config),
                     ConfigReload::Rejected(message) => RuntimeUpdate::ConfigRejected(message),
                 };
-                let _ = updates.send(update);
+                if updates.send(update).is_err() {
+                    tracing::warn!(component = "runtime", "runtime update receiver dropped");
+                }
             }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
@@ -110,7 +117,12 @@ fn debounce_skills_events(
             }
             Ok(Ok(_)) => {}
             Ok(Err(error)) => {
-                let _ = updates.send(RuntimeUpdate::SkillsRejected(error.to_string()));
+                if updates
+                    .send(RuntimeUpdate::SkillsRejected(error.to_string()))
+                    .is_err()
+                {
+                    tracing::warn!(component = "runtime", "runtime update receiver dropped");
+                }
             }
             Err(RecvTimeoutError::Timeout) if pending && last_event.elapsed() >= debounce => {
                 pending = false;
@@ -122,7 +134,9 @@ fn debounce_skills_events(
                     SkillsReload::Applied(index) => RuntimeUpdate::SkillsApplied(index),
                     SkillsReload::Rejected(message) => RuntimeUpdate::SkillsRejected(message),
                 };
-                let _ = updates.send(update);
+                if updates.send(update).is_err() {
+                    tracing::warn!(component = "runtime", "runtime update receiver dropped");
+                }
             }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,

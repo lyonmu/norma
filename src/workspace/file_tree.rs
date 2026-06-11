@@ -42,9 +42,13 @@ pub fn load_file_tree(
     let root = root.as_ref();
     tracing::debug!(component = "workspace", root = %root.display(), max_entries, "file tree load started");
     if !root.exists() {
+        let error = WorkspaceError::MissingPath(root.to_path_buf());
+        tracing::warn!(component = "workspace", root = %root.display(), error = %error, "file tree load failed");
         return Err(WorkspaceError::MissingPath(root.to_path_buf()));
     }
     if !root.is_dir() {
+        let error = WorkspaceError::NotDirectory(root.to_path_buf());
+        tracing::warn!(component = "workspace", root = %root.display(), error = %error, "file tree load failed");
         return Err(WorkspaceError::NotDirectory(root.to_path_buf()));
     }
 

@@ -37,7 +37,7 @@ pub fn bootstrap() -> anyhow::Result<RuntimeContext> {
     .context("failed to run startup log maintenance")?;
     let _maintenance = start_log_maintenance(paths.log_dir.clone(), config.logging.clone());
     let skill_index = scan_skills(&paths.skills_dir).unwrap_or_else(|error| {
-        tracing::warn!(error = %error, "failed to scan skills directory");
+        tracing::warn!(component = "skills", root = %paths.skills_dir.display(), error = %error, "failed to scan skills directory");
         SkillIndex::default()
     });
     let config_state = Arc::new(Mutex::new(ConfigState::new(config.clone())));

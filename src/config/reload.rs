@@ -69,16 +69,10 @@ mod tests {
     use super::*;
     use crate::config::write_config;
     use crate::paths::NormaPaths;
-    use std::sync::{Mutex, OnceLock};
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     #[test]
     fn reload_keeps_last_good_config_when_new_file_is_invalid() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = crate::config::env_lock().lock().unwrap();
         let root = tempfile::tempdir().unwrap();
         let paths = NormaPaths::from_home(root.path());
         paths.create_all().unwrap();
@@ -99,7 +93,7 @@ mod tests {
 
     #[test]
     fn reload_applies_valid_config() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = crate::config::env_lock().lock().unwrap();
         let root = tempfile::tempdir().unwrap();
         let paths = NormaPaths::from_home(root.path());
         paths.create_all().unwrap();
