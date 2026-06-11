@@ -2,17 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build Norma V1 as a GPUI desktop project workbench shell that matches the Review-First Codex visual target, reads real local project files and Git status, and renders a mock agent execution stream without modifying project files.
+**Goal:** Build Norma V1 as a GPUI desktop project workbench shell that matches the Review-First Codex visual target, supports no-project and project-open states, reads real local project files and Git status, and renders a mock agent execution stream without modifying project files.
 
-**Architecture:** Keep `main.rs` small and split the app into focused modules: `workspace` for project/file context, `git` for read-only repository summaries, `session` for threads/events/inspector state, `agent` for the mock runtime, and `ui` for GPUI views. Build and test data/state modules first, then wire the UI to those states. V1 must display compare/revert/undo controls only as disabled or preview-only affordances.
+**Architecture:** Keep `main.rs` small and split the app into focused modules: `workspace` for project/file context, `git` for read-only repository summaries, `session` for threads/events/inspector review state, `agent` for the mock runtime, `app_state` for no-project/project-open assembly, and `ui` for GPUI views. Build and test data/state modules first, then wire the UI to those states. V1 must display compare/revert/undo controls only as disabled or preview-only affordances.
 
-**Tech Stack:** Rust 2024, GPUI `0.2.2`, `ignore` for file traversal with ignore-file support, `thiserror` for typed errors, `anyhow` for app bootstrap context, standard `std::process::Command` for read-only Git commands in V1.
+**Tech Stack:** Rust 2024, GPUI `0.2.2`, `ignore` for file traversal with ignore-file support, `thiserror` for typed errors, `anyhow` for app bootstrap context, standard `std::process::Command` only for the read-only Git status query in V1.
 
 ---
 
 ## Scope Check
 
-The spec includes future roadmap items for model providers, MCP, Skills, ACP, Sub-Agent, Multi-Agent, real patching, and destructive Git operations. This plan implements only V1 from `docs/superpowers/specs/2026-06-11-norma-project-workbench-design.md`: project workbench shell, visual contract, real file tree, basic read-only Git status, session/event state, mock runtime, and disabled/preview-only Git action UI.
+The spec includes future roadmap items for model providers, MCP, Skills, ACP, Sub-Agent, Multi-Agent, real patching, and destructive Git operations. This plan implements only V1 from `docs/superpowers/specs/2026-06-11-norma-project-workbench-design.md`: no-project and project-open shell states, visual contract, real file tree, basic read-only Git status, session/event state, session-derived mock change review state, mock runtime, and disabled/preview-only Git action UI.
 
 ## Dependency And Toolchain Facts
 
@@ -39,19 +39,19 @@ Create or modify these files:
   Export app modules so unit tests can target them.
 
 - Create: `src/workspace.rs`  
-  Own `Project`, `FileNode`, workspace errors, file tree loading through `ignore::WalkBuilder`, and deterministic sample fallback data.
+  Own `Project`, `FileNode`, workspace errors, file tree loading through `ignore::WalkBuilder`, hidden/internal directory filtering, and deterministic sample fallback data.
 
 - Create: `src/git.rs`  
   Own read-only Git status models and parsing for `git status --porcelain=v1 --branch`. No mutating Git commands.
 
 - Create: `src/session.rs`  
-  Own `SessionThread`, `SessionEvent`, execution-step state, `InspectorMode`, and derived `SessionState`.
+  Own `SessionThread`, `SessionEvent`, execution-step state, `InspectorTab`, session-derived review state, and derived `SessionState`.
 
 - Create: `src/agent.rs`  
   Define `AgentRuntime` and `MockAgentRuntime` that emits deterministic V1 events for the visual contract.
 
 - Create: `src/app_state.rs`  
-  Build the in-memory `NormaAppState` used by UI components.
+  Build the in-memory `NormaAppState` used by UI components, including `ProjectSelectionState` for no-project and project-open states.
 
 - Create: `src/ui/mod.rs`  
   Re-export UI modules.
@@ -231,6 +231,23 @@ pub struct FileNode {
     pub depth: usize,
 }
 
+pub fn sample_file_tree() -> Vec<FileNode> {
+    [
+        ("src", FileKind::Directory, 0),
+        ("main.rs", FileKind::File, 1),
+        ("README.md", FileKind::File, 0),
+        ("Cargo.toml", FileKind::File, 0),
+    ]
+    .into_iter()
+    .map(|(name, kind, depth)| FileNode {
+        path: PathBuf::from(name),
+        name: name.to_string(),
+        kind,
+        depth,
+    })
+    .collect()
+}
+
 pub fn open_project(path: impl AsRef<Path>) -> Result<Project, WorkspaceError> {
     let root = path.as_ref().to_path_buf();
     if !root.exists() {
@@ -258,7 +275,7 @@ pub fn load_file_tree(root: impl AsRef<Path>, max_entries: usize) -> Result<Vec<
 
     let mut nodes = Vec::new();
     for entry in WalkBuilder::new(root)
-        .hidden(false)
+        .hidden(true)
         .git_ignore(true)
         .git_global(true)
         .parents(true)
@@ -343,6 +360,29 @@ mod tests {
         assert!(names.contains(&"main.rs"));
         assert!(names.contains(&"README.md"));
         assert!(nodes.iter().any(|node| node.name == "main.rs" && node.depth == 1));
+    }
+
+    #[test]
+    fn hides_internal_dot_directories_from_visible_tree() {
+        let root = test_root("hidden-dirs");
+        fs::create_dir_all(root.join(".git/objects")).unwrap();
+        fs::write(root.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+        fs::write(root.join("README.md"), "# Norma\n").unwrap();
+
+        let nodes = load_file_tree(&root, 10).unwrap();
+        let names: Vec<_> = nodes.iter().map(|node| node.name.as_str()).collect();
+
+        assert!(names.contains(&"README.md"));
+        assert!(!names.contains(&".git"));
+        assert!(!names.contains(&"HEAD"));
+    }
+
+    #[test]
+    fn sample_file_tree_is_deterministic() {
+        let first = sample_file_tree();
+        let second = sample_file_tree();
+        assert_eq!(first, second);
+        assert!(first.iter().any(|node| node.name == "README.md"));
     }
 }
 ```
@@ -721,9 +761,11 @@ use std::path::PathBuf;
 use crate::git::ChangedFile;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InspectorMode {
+pub enum InspectorTab {
+    Inspector,
     Context,
-    Changes,
+    Output,
+    Settings,
     Approval,
 }
 
@@ -787,7 +829,8 @@ pub struct FileChangePreview {
 pub struct SessionState {
     pub thread: SessionThread,
     pub events: Vec<SessionEvent>,
-    pub inspector_mode: InspectorMode,
+    pub active_tab: InspectorTab,
+    pub changed_files: Vec<ChangedFile>,
     pub selected_change: Option<FileChangePreview>,
 }
 
@@ -796,14 +839,16 @@ impl SessionState {
         Self {
             thread,
             events: Vec::new(),
-            inspector_mode: InspectorMode::Context,
+            active_tab: InspectorTab::Context,
+            changed_files: Vec::new(),
             selected_change: None,
         }
     }
 
     pub fn push_event(&mut self, event: SessionEvent) {
         if let SessionEvent::ChangeSummary { files } = &event {
-            self.inspector_mode = InspectorMode::Changes;
+            self.active_tab = InspectorTab::Inspector;
+            self.changed_files = files.clone();
             self.selected_change = files.first().map(|file| FileChangePreview {
                 path: file.path.clone(),
                 hunks: (1..=file.hunk_count.max(1))
@@ -818,7 +863,7 @@ impl SessionState {
             });
         }
         if matches!(event, SessionEvent::Error { .. }) {
-            self.inspector_mode = InspectorMode::Approval;
+            self.active_tab = InspectorTab::Approval;
         }
         self.events.push(event);
     }
@@ -841,12 +886,13 @@ mod tests {
     #[test]
     fn starts_in_context_mode() {
         let state = SessionState::new(sample_thread());
-        assert_eq!(state.inspector_mode, InspectorMode::Context);
+        assert_eq!(state.active_tab, InspectorTab::Context);
         assert!(state.events.is_empty());
+        assert!(state.changed_files.is_empty());
     }
 
     #[test]
-    fn change_summary_switches_to_changes_mode() {
+    fn change_summary_switches_to_inspector_tab_and_sets_review_state() {
         let mut state = SessionState::new(sample_thread());
         state.push_event(SessionEvent::ChangeSummary {
             files: vec![ChangedFile {
@@ -858,7 +904,8 @@ mod tests {
             }],
         });
 
-        assert_eq!(state.inspector_mode, InspectorMode::Changes);
+        assert_eq!(state.active_tab, InspectorTab::Inspector);
+        assert_eq!(state.changed_files.len(), 1);
         assert_eq!(state.selected_change.as_ref().unwrap().hunks.len(), 4);
     }
 
@@ -868,7 +915,7 @@ mod tests {
         state.push_event(SessionEvent::Error {
             message: "需要人工确认".to_string(),
         });
-        assert_eq!(state.inspector_mode, InspectorMode::Approval);
+        assert_eq!(state.active_tab, InspectorTab::Approval);
     }
 }
 ```
@@ -1101,24 +1148,72 @@ use std::env;
 use crate::agent::{AgentRuntime, MockAgentRuntime};
 use crate::git::{GitStatusSummary, read_status};
 use crate::session::{SessionState, sample_thread};
-use crate::workspace::{FileNode, Project, load_file_tree, open_project};
+use crate::workspace::{FileNode, Project, load_file_tree, open_project, sample_file_tree};
+
+#[derive(Debug, Clone)]
+pub enum ProjectSelectionState {
+    NoProject,
+    ProjectOpen(Project),
+    OpenError { attempted_path: String, message: String },
+}
 
 #[derive(Debug, Clone)]
 pub struct NormaAppState {
-    pub project: Project,
+    pub project_state: ProjectSelectionState,
     pub files: Vec<FileNode>,
     pub git: GitStatusSummary,
     pub session: SessionState,
 }
 
 impl NormaAppState {
+    pub fn project_name(&self) -> String {
+        match &self.project_state {
+            ProjectSelectionState::ProjectOpen(project) => project.name.clone(),
+            ProjectSelectionState::NoProject => "未打开项目".to_string(),
+            ProjectSelectionState::OpenError { .. } => "项目打开失败".to_string(),
+        }
+    }
+
+    pub fn project_path_label(&self) -> String {
+        match &self.project_state {
+            ProjectSelectionState::ProjectOpen(project) => project.root.display().to_string(),
+            ProjectSelectionState::NoProject => "选择一个本地项目目录开始".to_string(),
+            ProjectSelectionState::OpenError { attempted_path, .. } => attempted_path.clone(),
+        }
+    }
+
+    pub fn no_project() -> Self {
+        Self {
+            project_state: ProjectSelectionState::NoProject,
+            files: Vec::new(),
+            git: GitStatusSummary::unavailable("no project open"),
+            session: SessionState::new(sample_thread()),
+        }
+    }
+
     pub fn load_current_project() -> Self {
         let root = env::current_dir().unwrap_or_else(|_| ".".into());
-        let project = open_project(&root).unwrap_or_else(|_| Project {
-            name: "norma".to_string(),
-            root,
-        });
-        let files = load_file_tree(&project.root, 80).unwrap_or_default();
+        Self::load_project(root)
+    }
+
+    pub fn load_project(root: impl Into<std::path::PathBuf>) -> Self {
+        let root = root.into();
+        let project = match open_project(&root) {
+            Ok(project) => project,
+            Err(error) => {
+                return Self {
+                    project_state: ProjectSelectionState::OpenError {
+                        attempted_path: root.display().to_string(),
+                        message: error.to_string(),
+                    },
+                    files: sample_file_tree(),
+                    git: GitStatusSummary::unavailable("project could not be opened"),
+                    session: SessionState::new(sample_thread()),
+                };
+            }
+        };
+
+        let files = load_file_tree(&project.root, 80).unwrap_or_else(|_| sample_file_tree());
         let git = read_status(&project.root);
 
         let runtime = MockAgentRuntime;
@@ -1128,7 +1223,7 @@ impl NormaAppState {
         }
 
         Self {
-            project,
+            project_state: ProjectSelectionState::ProjectOpen(project),
             files,
             git,
             session,
@@ -1143,8 +1238,16 @@ mod tests {
     #[test]
     fn app_state_contains_mock_session_events() {
         let state = NormaAppState::load_current_project();
-        assert!(!state.project.name.is_empty());
         assert!(!state.session.events.is_empty());
+        assert!(!state.session.changed_files.is_empty());
+    }
+
+    #[test]
+    fn no_project_state_has_no_files_or_git_repository() {
+        let state = NormaAppState::no_project();
+        assert!(matches!(state.project_state, ProjectSelectionState::NoProject));
+        assert!(state.files.is_empty());
+        assert!(!state.git.is_repository);
     }
 }
 ```
@@ -1359,7 +1462,7 @@ impl Render for AppShell {
                             .h_full()
                             .border_r_1()
                             .border_color(theme::border())
-                            .child(components::section_title(format!("{} sidebar", self.state.project.name))),
+                            .child(components::section_title(format!("{} sidebar", self.state.project_name()))),
                     )
                     .child(
                         div()
@@ -1398,7 +1501,9 @@ fn top_toolbar() -> impl IntoElement {
                 .items_center()
                 .gap_3()
                 .child(components::icon_button("N"))
-                .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child("Norma")),
+                .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child("Norma"))
+                .child(components::icon_button("←"))
+                .child(components::icon_button("→")),
         )
         .child(
             div()
@@ -1518,8 +1623,8 @@ fn project_card(state: &NormaAppState) -> AnyElement {
         .border_1()
         .border_color(theme::border())
         .p_3()
-        .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(state.project.name.clone()))
-        .child(components::label(state.project.root.display().to_string()))
+        .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(state.project_name()))
+        .child(components::label(state.project_path_label()))
         .into_any_element()
 }
 
@@ -1705,6 +1810,9 @@ pub fn render_execution(session: &SessionState) -> AnyElement {
                 .flex()
                 .flex_col()
                 .gap_3()
+                .border_l_1()
+                .border_color(theme::border())
+                .pl_4()
                 .children(session.events.iter().filter_map(render_event)),
         )
         .child(composer())
@@ -1720,7 +1828,8 @@ fn task_header(session: &SessionState) -> AnyElement {
             div()
                 .text_size(px(18.))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .child(session.thread.title.clone()),
+                .child(session.thread.title.clone())
+                .child(" ✎"),
         )
         .child(components::pill("继续任务", false))
         .into_any_element()
@@ -1859,7 +1968,13 @@ fn composer() -> AnyElement {
                         .child(components::pill("添加上下文", false))
                         .child(components::pill("使用工具", false)),
                 )
-                .child(components::pill("自动执行", false)),
+                .child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(components::pill("自动执行", false))
+                        .child(components::icon_button("↵")),
+                ),
         )
         .into_any_element()
 }
@@ -1942,20 +2057,21 @@ Create `src/ui/inspector.rs`:
 use gpui::{AnyElement, ParentElement, Styled, div, prelude::*, px};
 
 use crate::app_state::NormaAppState;
-use crate::session::InspectorMode;
+use crate::session::InspectorTab;
 use crate::ui::{components, theme};
 
 pub fn render_inspector(state: &NormaAppState) -> AnyElement {
-    let added: usize = state.git.files.iter().map(|file| file.added_lines).sum();
-    let deleted: usize = state.git.files.iter().map(|file| file.deleted_lines).sum();
-    let changed_count = state.git.files.len();
+    let review_files = &state.session.changed_files;
+    let added: usize = review_files.iter().map(|file| file.added_lines).sum();
+    let deleted: usize = review_files.iter().map(|file| file.deleted_lines).sum();
+    let changed_count = review_files.len();
 
     div()
         .size_full()
         .bg(theme::surface())
         .flex()
         .flex_col()
-        .child(tabs(state.session.inspector_mode))
+        .child(tabs(state.session.active_tab))
         .child(
             div()
                 .p_5()
@@ -1981,12 +2097,12 @@ pub fn render_inspector(state: &NormaAppState) -> AnyElement {
         .into_any_element()
 }
 
-fn tabs(active: InspectorMode) -> AnyElement {
+fn tabs(active: InspectorTab) -> AnyElement {
     let names = [
-        ("检查器", InspectorMode::Changes),
-        ("上下文", InspectorMode::Context),
-        ("输出", InspectorMode::Context),
-        ("设置", InspectorMode::Context),
+        ("检查器", InspectorTab::Inspector),
+        ("上下文", InspectorTab::Context),
+        ("输出", InspectorTab::Output),
+        ("设置", InspectorTab::Settings),
     ];
     div()
         .h(px(50.))
@@ -1997,7 +2113,7 @@ fn tabs(active: InspectorMode) -> AnyElement {
         .gap_6()
         .px_5()
         .children(names.into_iter().map(|(name, mode)| {
-            let is_active = active == mode || (name == "检查器" && active == InspectorMode::Changes);
+            let is_active = active == mode;
             div()
                 .pb_3()
                 .border_b_2()
@@ -2047,10 +2163,10 @@ fn changed_files(state: &NormaAppState) -> AnyElement {
             div()
                 .flex()
                 .justify_between()
-                .child(components::section_title(format!("变更文件 ({})", state.git.files.len())))
+                .child(components::section_title(format!("变更文件 ({})", state.session.changed_files.len())))
                 .child(components::pill("全部", false)),
         )
-        .children(state.git.files.iter().take(8).map(|file| {
+        .children(state.session.changed_files.iter().take(8).map(|file| {
             div()
                 .rounded(px(7.))
                 .px_3()
@@ -2098,7 +2214,7 @@ fn file_preview(state: &NormaAppState) -> AnyElement {
                         .flex()
                         .justify_between()
                         .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(change.path.display().to_string()))
-                        .child(components::pill("打开对比", false)),
+                        .child(components::pill("预览对比", false)),
                 )
                 .children(change.hunks.iter().map(|hunk| {
                     div()
@@ -2164,15 +2280,16 @@ div()
     .child(inspector::render_inspector(&self.state))
 ```
 
-- [ ] **Step 4: Verify no destructive Git operation is introduced**
+- [ ] **Step 4: Verify no destructive Git operation or stale inspector data source is introduced**
 
 Run:
 
 ```bash
 rg -n 'reset|restore|checkout|clean|apply|commit|push' src
+rg -n 'InspectorMode|inspector_mode|state\.git\.files|state\.project\.|\.hidden\(false\)' src
 ```
 
-Expected: no command execution using those words. UI labels may contain non-command descriptions only if they are disabled or preview-only.
+Expected: first command shows no command execution using destructive words. UI labels may contain non-command descriptions only if they are disabled or preview-only. Second command shows no matches.
 
 - [ ] **Step 5: Verify compilation and tests**
 
@@ -2233,9 +2350,12 @@ Verify at a desktop window near `1440x1024`:
 - [ ] App uses a light native desktop surface.
 - [ ] Top toolbar includes Norma brand, back/forward controls, model selector, local runtime, safety level, run button, notification, and settings controls.
 - [ ] Top toolbar does not include a user avatar, account menu, profile control, or sign-in state.
+- [ ] No-project state keeps the three-column shell, shows an open-project affordance, and keeps the inspector inactive.
+- [ ] Project-open state uses a selected local project root; current working directory loading is documented as a development fallback only.
 - [ ] Left sidebar includes project card, grouped thread list, file tree, and Git status card.
-- [ ] Center stream includes task title, goal/constraint/status block, completed step cards, active step card, pending step card, and composer.
+- [ ] Center stream includes task title with edit affordance, goal/constraint/status block, timeline rail, completed step cards, active step card, pending step card, and composer with send control.
 - [ ] Right inspector includes tabs, change metrics, safety row, changed files, hunk preview, and disabled Git operation rows.
+- [ ] Right inspector metrics, changed file list, and selected-file preview come from the same session `ChangeSummary`.
 - [ ] No embedded code editor or large code pane is visible.
 - [ ] Compare/revert/undo/discard operations are disabled, preview-only, or marked mock-safe.
 - [ ] Text is not clipped or overlapping.
@@ -2305,6 +2425,7 @@ Expected:
 - type checking passes
 - tests pass
 - no destructive Git command execution appears in `src`
+- no stale inspector mode names or mixed inspector data sources remain
 
 - [ ] **Step 3: Manual visual verification**
 
@@ -2320,7 +2441,7 @@ Use `tests/visual_contract.md` and compare against:
 docs/superpowers/specs/assets/norma-review-first-codex-workbench.png
 ```
 
-Expected: every checklist item passes or has a documented reason tied to GPUI constraints.
+Expected: every checklist item passes or has a documented reason tied to GPUI constraints. Any documented exception must not remove no-project state, session-derived review data, disabled destructive actions, or the core three-column visual structure.
 
 - [ ] **Step 4: Summarize implementation state**
 

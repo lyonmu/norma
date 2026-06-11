@@ -6,7 +6,7 @@ Date: 2026-06-11
 
 Norma V1 is a project-session desktop agent workbench built with Rust and GPUI. It should feel close to Codex: calm, native, thread-based, evidence-oriented, and focused on helping developers understand what the agent did.
 
-The first implementation is intentionally scoped to a UI shell with real local project context. It opens a project, shows project files and Git status, lets the developer create project threads, renders a Codex-style execution stream, and uses a mock agent runtime to produce traceable events. It does not call real models, modify code, run destructive commands, or implement the full README feature set yet.
+The first implementation is intentionally scoped to a UI shell with real local project context. It opens a project, shows project files and Git status, lets the developer create project threads, renders a Codex-style execution stream, and uses a mock agent runtime to produce traceable events. It does not call real models, modify code, execute arbitrary agent commands, or implement the full README feature set yet. The only command-style process allowed in V1 is a narrowly scoped, read-only Git status query used by the `git` module.
 
 Selected visual direction: **Review-First Codex Workbench**.
 
@@ -38,6 +38,7 @@ The V1 product flow is:
 - GPUI desktop shell with a three-column workbench.
 - Codex-inspired visual language: restrained surfaces, clear typography, light sidebars, thin dividers, compact rows, and a review-first right panel.
 - Project/session sidebar with current project, thread list, file tree entry points, and Git summary.
+- Project open state, open-project action, and no-project empty state.
 - Real local project root loading.
 - Real file tree reading.
 - Basic Git status reading.
@@ -52,7 +53,7 @@ The V1 product flow is:
 
 - Embedded code editor.
 - Real LLM provider integration.
-- Real command execution.
+- Arbitrary or agent-initiated command execution.
 - Real file writes or patch application.
 - Real diff hunk editing.
 - Destructive Git operations.
@@ -70,6 +71,7 @@ Norma should be split into small modules under `src/` as the codebase grows:
 - `session`: project threads, session events, event aggregation, and inspector state.
 - `agent`: `AgentRuntime` trait, mock runtime, and future model/tool runtimes.
 - `config`: recent projects, window state, and future model/MCP/Skills settings.
+- `app_state`: selected project state, session assembly, and UI-facing derived state.
 
 `main.rs` should stay small. It should initialize the app, load configuration, construct the top-level application state, and mount the root GPUI view.
 
@@ -143,7 +145,9 @@ Toolbar controls should be compact and quiet. They should not dominate the page 
 
 ### Empty And Initial State
 
-When no project is open, Norma should keep the same shell proportions but show a simple project-open state in the center and an inactive inspector. After a project is open but before a thread exists, the center should guide the developer to create a task thread while the left sidebar can already show files and Git status.
+When no project is open, Norma should keep the same shell proportions but show a simple project-open state in the center and an inactive inspector. The open state can be a native folder picker when available, or a compact local-path entry/open action if GPUI integration makes the native picker too costly for V1. A current-working-directory fallback is acceptable only as a development fallback; it is not the product open-project flow.
+
+After a project is open but before a thread exists, the center should guide the developer to create a task thread while the left sidebar can already show files and Git status.
 
 ### Left Sidebar
 
@@ -198,8 +202,10 @@ The reference center stream has these required pieces:
 
 The right panel is a state-driven inspector, not a static utility drawer. Modes:
 
-- Context: project root, selected files, runtime status, Git summary.
-- Changes: changed file count, inserted/deleted lines, file-level diff list, hunk counts, compare entry points.
+- Inspector: review dashboard for the active thread or selected change.
+- Context: project root, selected files, runtime status, and Git summary.
+- Output: execution output summaries and future command/tool output.
+- Settings: disabled or future-facing runtime settings entry points.
 - Approval: pending actions, safety warnings, and confirmation controls.
 
 When there are changes, the inspector becomes a review dashboard. It should show:
@@ -214,6 +220,8 @@ When there are changes, the inspector becomes a review dashboard. It should show
 - open external editor action
 
 V1 may show disabled or mock states for actions that are not safe or implemented yet. The design must make the boundary visible.
+
+The inspector must not mix incompatible data sources. For the V1 mock runtime, change overview metrics, changed-file rows, selected-file preview, and hunk summaries come from the active session's `ChangeSummary` event. Real `GitStatusSummary` appears in the project/sidebar context and may be shown in Context mode, but it must not replace the mock session change list in the review dashboard. This prevents a clean working tree from rendering "0 changed files" beside a mock selected-file preview.
 
 The reference right inspector has a review dashboard layout. V1 should include:
 
@@ -286,28 +294,31 @@ The roadmap can enable real Git actions later only after confirmation flows and 
 
 Data flows from project context to session events to inspector state:
 
-1. `workspace` loads the selected project root, file tree, and metadata.
-2. `git` reads basic repository status when available.
-3. `session` creates a project thread and stores `SessionEvent` records.
-4. `agent::AgentRuntime` receives a task request and streams events.
-5. `MockAgentRuntime` emits deterministic events in V1.
-6. The center execution stream renders events directly.
-7. The right inspector reads derived `SessionState` and `GitStatusSummary`.
+1. `app_state` tracks whether a project is open.
+2. `workspace` loads the selected project root, file tree, and metadata after the user opens a project.
+3. `git` reads basic repository status when available.
+4. `session` creates a project thread and stores `SessionEvent` records.
+5. `agent::AgentRuntime` receives a task request and streams events.
+6. `MockAgentRuntime` emits deterministic events in V1.
+7. The center execution stream renders events directly.
+8. The right inspector derives review-dashboard state from session `ChangeSummary` events, and derives project context from `GitStatusSummary`.
 
-The UI should not directly call model providers, execute commands, or mutate files. Those capabilities must enter through runtime or action interfaces.
+The UI should not directly call model providers, execute arbitrary commands, or mutate files. Read-only Git status is isolated in the `git` module. Future model/tool/file mutation capabilities must enter through runtime or action interfaces.
 
 ## Core Types
 
 The exact names can evolve, but the design should preserve these boundaries:
 
 - `Project`: id, name, root path, Git availability.
-- `FileNode`: path, kind, children, optional status.
+- `ProjectSelectionState`: no project, project open, and project open error.
+- `FileNode`: path, kind, depth, optional status, hidden/excluded filtering.
 - `GitStatusSummary`: repository state, changed count, untracked count, branch, error.
 - `ChangedFile`: path, status, inserted lines, deleted lines, hunk count.
 - `DiffHunkSummary`: hunk index, line range, inserted lines, deleted lines, collapsed/expanded state.
 - `SessionThread`: id, project id, title, created/updated timestamps.
 - `SessionEvent`: request message, agent plan, tool call, command output, change summary, final response, error.
-- `InspectorMode`: context, changes, approval.
+- `InspectorTab`: inspector, context, output, settings, approval.
+- `InspectorReviewState`: session-derived changed files, selected file preview, and safety summary.
 - `AgentRuntime`: trait that streams session events.
 - `MockAgentRuntime`: deterministic V1 implementation.
 - `GitActionRequest`: future-safe representation for compare, revert, undo, and discard operations.
@@ -317,6 +328,7 @@ The exact names can evolve, but the design should preserve these boundaries:
 Errors should be visible, local, and recoverable:
 
 - Project open failures show clear project-state messages.
+- No-project state is a first-class state, not an application error.
 - File tree failures do not crash the whole app.
 - Non-Git projects are supported with Git summary disabled.
 - Git command failures show `unavailable` or a short reason.
@@ -367,10 +379,12 @@ Implementation should follow Rust best practices:
 Minimum V1 tests:
 
 - `workspace`: project name parsing, file tree loading, missing path, non-directory path, permission-like failures where practical.
+- `workspace`: hidden/internal directories such as `.git` are excluded from the visible file tree.
 - `git`: status parsing, non-Git directory, changed/untracked/renamed files, command failure handling.
 - `git`: no V1 path may execute destructive Git actions such as reset, checkout, restore, clean, or patch application.
-- `session`: event append order, derived session state, inspector mode switching.
+- `session`: event append order, derived session state, inspector tab switching, and session-derived change review state.
 - `agent`: mock runtime event sequence and cancellation/error behavior.
+- `app_state`: no-project state, project-open state, current-directory development fallback, and consistency between session change summaries and inspector review state.
 - `ui`: smoke test or manual verification that the GPUI window shows the three-column shell and key empty/error states.
 - `ui`: manual visual verification against `assets/norma-review-first-codex-workbench.png` at a desktop size near `1440x1024`.
 
@@ -386,6 +400,7 @@ Manual visual verification checklist:
 - left sidebar contains the project card, grouped threads, file tree, and Git card
 - center stream includes task header, summary block, timeline cards, and composer
 - right inspector includes tabs, metrics, safety row, changed file list, hunk preview, and Git operation rows
+- review dashboard metrics, changed-file rows, and selected preview are derived from the same session change summary
 - no embedded editor appears
 - no destructive Git action is enabled in V1
 - spacing, type sizes, colors, and dividers remain close to the reference image

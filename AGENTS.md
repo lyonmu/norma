@@ -1,31 +1,64 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Project Summary
 
-Norma is a Rust desktop-agent project built around Cargo and GPUI. The current executable entry point is `src/main.rs`. Keep application code under `src/`, grouping new modules by responsibility, for example `src/ui/`, `src/agent/`, or `src/config/` as the codebase grows. Static assets live under `asset/`; the current app icon is `asset/img/icon.png`. Package metadata and bundle/deb settings are defined in `Cargo.toml`. `README.md` and `README.zh.md` are the user-facing English and Simplified Chinese docs.
+Norma is a Rust 2024 desktop-agent project. The current implementation is still a minimal binary (`src/main.rs` prints `Hello, world!`), while `README.md`, `README.zh.md`, and `Cargo.toml` describe the intended GPUI-based agent product. Treat the code as the source of truth: do not claim multi-model, MCP, ACP, Skills, sub-agent, or multi-agent runtime support is implemented until the corresponding Rust modules exist.
 
-## Build, Test, and Development Commands
+The active V1 direction is documented under `docs/superpowers/`: a GPUI project workbench shell with real local project/file and read-only Git context, mock agent events, and disabled or preview-only review actions.
 
-- `cargo run`: builds and runs the local binary for quick development checks.
-- `cargo check`: type-checks the crate without producing an optimized binary; run this before submitting changes.
-- `cargo build --release`: creates the release binary used by packaging metadata under `target/release/norma`.
-- `cargo test`: runs unit and integration tests when present.
-- `cargo fmt --check`: verifies Rust formatting without changing files.
+## Tech Stack & Dependencies
 
-Use `cargo fmt` to apply formatting before committing. Keep `Cargo.lock` committed because this is an application, not only a library crate.
+- Language/tooling: Rust 2024, Cargo, rustfmt.
+- Runtime/UI dependency: `gpui`; `Cargo.lock` currently resolves it to `0.2.2`.
+- Packaging metadata: `Cargo.toml` contains `package.metadata.bundle` and `package.metadata.deb`.
+- Assets: current visible app asset is `asset/img/icon.png`.
 
-## Coding Style & Naming Conventions
+Do not reintroduce `gpui_platform`; the public dependency used by this crate is `gpui`.
 
-Use standard Rust formatting from `rustfmt` with 4-space indentation. Prefer descriptive module and function names in `snake_case`; use `PascalCase` for types and traits, and `SCREAMING_SNAKE_CASE` for constants. Keep public APIs small and document non-obvious behavior with concise Rust doc comments. Avoid large logic blocks in `main.rs`; move reusable behavior into modules under `src/`.
+## Repository Layout
 
-## Testing Guidelines
+- `src/main.rs`: current executable entry point. Keep it small as the app grows.
+- `asset/`: static assets; preserve existing icons unless intentionally updating branding.
+- `docs/superpowers/specs/`: product/design specs and reference assets.
+- `docs/superpowers/plans/`: implementation plans. Follow these when implementing the V1 workbench.
+- `README.md` and `README.zh.md`: user-facing docs.
+- `Cargo.toml` and `Cargo.lock`: crate config, dependencies, and packaging metadata.
+- `target/`: build output; never edit or commit generated files from here.
 
-Place unit tests beside the code they cover using `#[cfg(test)] mod tests`. Put cross-module or CLI-style tests in `tests/` once needed. Name tests after observable behavior, such as `loads_default_config` or `renders_main_window`. At minimum, run `cargo test` and `cargo check` before opening a pull request.
+## Commands
 
-## Commit & Pull Request Guidelines
+- `cargo run`: build and run the current binary.
+- `cargo check`: type-check the crate; run before finishing code changes.
+- `cargo test`: run unit/integration tests when present.
+- `cargo fmt --check`: verify formatting.
+- `cargo fmt`: apply Rust formatting.
+- `cargo clippy --all-targets -- -D warnings`: lint when the Clippy component is installed.
+- `cargo build --release`: build the release binary referenced by packaging metadata.
 
-This repository currently has no commit history, so no project-specific commit convention is established. Use short imperative commit messages, for example `Add GPUI window skeleton` or `Fix config loading error`. Pull requests should describe the user-visible change, list validation commands run, and include screenshots or recordings for UI changes. Link related issues when available and call out any packaging or asset changes.
+There are no Make, npm, pnpm, or shell task scripts in the current repository.
 
-## Security & Configuration Tips
+## Code Style & Architecture
 
-Do not commit API keys, local model tokens, or private MCP server credentials. Store environment-specific configuration outside the repository and document required variables in the README when new integrations are added.
+Use standard Rust naming: `snake_case` functions/modules, `PascalCase` types/traits, and `SCREAMING_SNAKE_CASE` constants. Keep public APIs small and document non-obvious behavior with concise doc comments.
+
+As the app grows, avoid large logic blocks in `main.rs`. Prefer focused modules aligned with the V1 plan, such as `ui`, `workspace`, `git`, `session`, `agent`, `config`, and app state. In V1, Git operations must be read-only unless a later spec explicitly changes that boundary; destructive actions such as reset, checkout, discard, or patch application should remain disabled or preview-only.
+
+## Agent Rules
+
+- Inspect the current checkout before editing; avoid copying README claims into code or docs as implemented facts.
+- Preserve `Cargo.lock`; this is an application crate.
+- Keep README language pairs in sync when changing user-facing behavior.
+- For UI work, respect the visual contract in `docs/superpowers/specs/2026-06-11-norma-project-workbench-design.md` and the reference image beside it.
+- Do not commit secrets, API keys, model tokens, MCP credentials, or machine-local config.
+- Be cautious when editing `Cargo.toml` packaging metadata, `asset/`, and `docs/superpowers/`; these files define product direction, packaging, or visual targets.
+
+## Pre-Submission Checklist
+
+Before handing off code changes:
+
+1. Run `cargo fmt --check`.
+2. Run `cargo check`.
+3. Run `cargo test`.
+4. Run `cargo clippy --all-targets -- -D warnings` when available.
+5. For UI changes, compare the GPUI window against the relevant `docs/superpowers` spec or checklist and include screenshots/notes.
+6. State any command that could not run and the exact reason.
