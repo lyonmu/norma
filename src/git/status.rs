@@ -62,10 +62,7 @@ impl GitStatusSummary {
 }
 
 pub fn read_status(root: impl AsRef<Path>) -> GitStatusSummary {
-    tracing::debug!(
-        root = %root.as_ref().display(),
-        "reading git status"
-    );
+    tracing::debug!(component = "git", root = %root.as_ref().display(), "git status command started");
     let output = Command::new("git")
         .arg("-C")
         .arg(root.as_ref())
@@ -77,12 +74,14 @@ pub fn read_status(root: impl AsRef<Path>) -> GitStatusSummary {
     let output = match output {
         Ok(output) => output,
         Err(error) => {
+            tracing::warn!(component = "git", root = %root.as_ref().display(), error = %error, "git status failed to start");
             return GitStatusSummary::unavailable(format!("failed to start git: {error}"));
         }
     };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        tracing::warn!(component = "git", root = %root.as_ref().display(), stderr = %stderr, "git status returned non-zero");
         return GitStatusSummary::unavailable(if stderr.is_empty() {
             "not a git repository".to_string()
         } else {
@@ -90,7 +89,17 @@ pub fn read_status(root: impl AsRef<Path>) -> GitStatusSummary {
         });
     }
 
-    parse_status(&String::from_utf8_lossy(&output.stdout))
+    let summary = parse_status(&String::from_utf8_lossy(&output.stdout));
+    tracing::debug!(
+        component = "git",
+        changed_files = summary.files.len(),
+        modified = summary.modified,
+        added = summary.added,
+        deleted = summary.deleted,
+        untracked = summary.untracked,
+        "git status parsed"
+    );
+    summary
 }
 
 pub fn parse_status(output: &str) -> GitStatusSummary {

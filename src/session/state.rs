@@ -1,82 +1,8 @@
-use std::path::PathBuf;
-
 use crate::git::ChangedFile;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InspectorTab {
-    Inspector,
-    Context,
-    Output,
-    Settings,
-    Approval,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SessionThread {
-    pub id: String,
-    pub project_name: String,
-    pub title: String,
-    pub updated_label: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StepStatus {
-    Completed,
-    Running,
-    Waiting,
-    Failed,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExecutionStep {
-    pub title: String,
-    pub description: String,
-    pub status: StepStatus,
-    pub duration_label: Option<String>,
-    pub checklist: Vec<ChecklistItem>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChecklistItem {
-    pub label: String,
-    pub status: StepStatus,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SessionEvent {
-    UserTask {
-        content: String,
-    },
-    AgentPlan {
-        goal: String,
-        constraints: Vec<String>,
-    },
-    StepUpdated(ExecutionStep),
-    ChangeSummary {
-        files: Vec<ChangedFile>,
-    },
-    FinalResponse {
-        content: String,
-    },
-    Error {
-        message: String,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DiffHunkSummary {
-    pub index: usize,
-    pub line_range: String,
-    pub added_lines: usize,
-    pub deleted_lines: usize,
-    pub expanded: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FileChangePreview {
-    pub path: PathBuf,
-    pub hunks: Vec<DiffHunkSummary>,
-}
+use super::event::SessionEvent;
+use super::inspector::{DiffHunkSummary, FileChangePreview, InspectorTab};
+use super::thread::SessionThread;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionState {
@@ -122,19 +48,12 @@ impl SessionState {
     }
 }
 
-pub fn sample_thread() -> SessionThread {
-    SessionThread {
-        id: "thread-design".to_string(),
-        project_name: "norma".to_string(),
-        title: "完善 Norma 项目设计".to_string(),
-        updated_label: "14:32".to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use super::super::thread::sample_thread;
     use super::*;
-    use crate::git::{ChangeKind, ChangedFile};
+    use crate::git::ChangeKind;
+    use std::path::PathBuf;
 
     #[test]
     fn starts_in_context_mode() {
