@@ -151,10 +151,15 @@ pub fn mask_secret(secret: &str) -> String {
     if secret.trim().is_empty() {
         return String::new();
     }
+    let tail_len = secret.chars().count().min(4);
+    if tail_len == secret.chars().count() {
+        return "••••••••••••".to_string();
+    }
+
     let visible_tail: String = secret
         .chars()
         .rev()
-        .take(4)
+        .take(tail_len)
         .collect::<Vec<_>>()
         .into_iter()
         .rev()
@@ -190,6 +195,12 @@ mod tests {
     #[test]
     fn masks_api_key_by_default() {
         assert_eq!(mask_secret("sk-preview-openai-default"), "••••••••••••ault");
+    }
+
+    #[test]
+    fn masks_short_secrets_completely() {
+        assert_eq!(mask_secret("abc"), "••••••••••••");
+        assert_eq!(mask_secret("abcd"), "••••••••••••");
     }
 
     #[test]
