@@ -4,7 +4,9 @@
 
 Norma is a Rust 2024 desktop agent/workbench built with Cargo and GPUI. The current code implements a GPUI workbench shell, local project/file context, read-only Git status summaries, mock agent session events, app settings preview UI, local `~/.norma` paths, TOML configuration, structured tracing logs, config/skills watchers, and a non-executing Skills directory index.
 
-README files and package metadata describe the broader product direction: multi-model providers, MCP, ACP, Skills, sub-agents, and multi-agent collaboration. Treat those as roadmap unless the corresponding Rust modules and tests exist. Current provider settings are preview-only; they do not perform real model calls or network connection tests.
+The codebase has been reorganized into domain directories for runtime, logging, config, app state, workspace, Git, session, skills, and agent abstractions. The `agent/` domain includes structured input, provider, and tool-use model boundaries, but these are abstractions only: they do not execute real providers, network requests, tools, MCP, ACP, Skills, sub-agents, or multi-agent workflows yet.
+
+README files and package metadata describe the broader product direction. Treat multi-model support, MCP, ACP, executable Skills, sub-agents, and multi-agent collaboration as roadmap unless the corresponding runtime implementation and tests exist.
 
 ## Tech Stack & Core Dependencies
 
@@ -21,14 +23,19 @@ Do not add `gpui_platform`; this crate depends on `gpui`.
 
 - `src/main.rs`: thin bootstrap only.
 - `src/lib.rs`: module exports only.
-- `src/runtime.rs`: startup orchestration for paths, config, telemetry, skills, watchers, and app state.
-- `src/paths.rs`: local `~/.norma` path contract.
-- `src/config.rs`: settings models, provider preview data, TOML config, validation, environment overrides, reload state.
-- `src/telemetry.rs`: current tracing initialization, JSON log writing, rotation, compression, retention.
-- `src/skills.rs`: scans `~/.norma/skills` without executing skills.
-- `src/workspace.rs`, `src/git.rs`, `src/session.rs`, `src/agent.rs`, `src/app_state.rs`: project state, read-only Git, session events, mock runtime, and aggregate app state.
+- `src/runtime/`: startup orchestration, runtime update messages, and config/skills watchers.
+- `src/logging/`: tracing initialization, JSON log writing, rotation, compression, retention, and logging errors.
+- `src/config/`: app settings preview models, persisted runtime config, TOML read/write, validation, environment overrides, and reload state.
+- `src/paths/`: local `~/.norma` path contract and directory creation.
+- `src/skills/`: scans and reloads `~/.norma/skills` without executing skills.
+- `src/workspace/`: project opening and file-tree loading.
+- `src/git/`: read-only Git status command and parser.
+- `src/session/`: session events, thread metadata, inspector state, and session state transitions.
+- `src/agent/`: agent runtime trait, deterministic mock runtime, agent-domain events, structured input models, provider abstractions, and tool-use models.
+- `src/app/`: aggregate `NormaAppState` and runtime update application.
 - `src/ui/`: GPUI views and helpers, including workbench shell, sidebar, execution stream, inspector, settings window, components, and theme.
-- `docs/superpowers/`: product specs, implementation plans, and reference images.
+- `docs/superpowers/specs/`: product and architecture specs, including the module/logging restructure design.
+- `docs/superpowers/plans/`: implementation plans. Treat plans as execution guidance, not proof that a capability exists unless the code is present.
 - `tests/*.md`: manual visual/runtime verification checklists.
 - `asset/`: static assets; current icon is `asset/img/icon.png`.
 - `target/`: generated build output; do not edit or commit.
@@ -59,23 +66,13 @@ tracing::info!(component = "config", path = %config_path.display(), "config load
 tracing::warn!(error = %err, "failed to load config");
 ```
 
-Never log secrets, API keys, model tokens, MCP credentials, or private config values. Avoid high-volume `info!` logs in GPUI render paths; use `debug!` or `trace!` sparingly.
+Never log secrets, API keys, model tokens, MCP credentials, raw provider credentials, or private config values. Avoid high-volume `info!` logs in GPUI render paths; use `debug!` or `trace!` sparingly.
 
 ## Modular Organization
 
 Keep `main.rs` and `lib.rs` free of business logic. `main.rs` should bootstrap runtime and UI; `lib.rs` should export modules.
 
-Organize new independent capabilities as module directories rather than piling logic into one file. For example, new logging work should move toward:
-
-```text
-src/logging/
-  mod.rs
-  config.rs
-  init.rs
-  layer.rs
-```
-
-Use clear domain boundaries: config loading in config modules, tracing setup in logging/telemetry modules, UI in `src/ui/`, agent runtime in agent modules, and future LLM, MCP, ACP, Skill, and Subagent features in their own domain modules. If a current single-file module receives substantial new behavior, prefer splitting it into a directory as part of that change.
+Organize independent capabilities as module directories. New work should extend the existing domain tree rather than adding broad top-level files. Use clear boundaries: config loading in `src/config/`, tracing setup in `src/logging/`, UI in `src/ui/`, aggregate state in `src/app/`, agent runtime and future provider/tool/input abstractions in `src/agent/`, and future LLM, MCP, ACP, Skills, and Subagent features in their own focused modules.
 
 ## Code Style
 
@@ -107,8 +104,9 @@ Summaries must be short, clear English. Avoid vague messages such as `update` or
 - `Cargo.toml` package metadata: bundle/deb settings affect release packaging.
 - `docs/superpowers/`: specs and plans are product contracts; update them only when intentionally changing scope.
 - `asset/`: avoid replacing branding assets incidentally.
-- `src/telemetry.rs` / future logging modules: maintain non-blocking structured JSON logging semantics.
-- `src/config.rs`: never store real secrets in sample data, tests, screenshots, or defaults.
+- `src/logging/`: maintain non-blocking structured JSON logging semantics.
+- `src/config/`: never store real secrets in sample data, tests, screenshots, or defaults.
+- `src/agent/provider/`, `src/agent/tools/`, and `src/agent/input/`: these are abstraction boundaries; do not imply real execution until runtime code and tests exist.
 - `~/.norma/`: generated local runtime state outside the repo; do not copy it into version control.
 - `target/`: generated output; never edit or commit.
 
