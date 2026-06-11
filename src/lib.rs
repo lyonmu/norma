@@ -4,5 +4,7 @@ pub mod config;
 pub mod git;
 pub mod paths;
 pub mod session;
+pub mod skills;
+pub mod telemetry;
 pub mod ui;
 pub mod workspace;
