@@ -4,7 +4,7 @@ use gpui::{
 };
 
 use crate::app_state::NormaAppState;
-use crate::ui::{components, theme};
+use crate::ui::{components, sidebar, theme};
 
 pub struct AppShell {
     state: NormaAppState,
@@ -36,10 +36,7 @@ impl Render for AppShell {
                             .h_full()
                             .border_r_1()
                             .border_color(theme::border())
-                            .child(components::section_title(format!(
-                                "{} sidebar",
-                                self.state.project_name()
-                            ))),
+                            .child(sidebar::render_sidebar(&self.state)),
                     )
                     .child(
                         div()
