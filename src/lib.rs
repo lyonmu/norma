@@ -3,6 +3,7 @@ pub mod app_state;
 pub mod config;
 pub mod git;
 pub mod paths;
+pub mod runtime;
 pub mod session;
 pub mod skills;
 pub mod telemetry;
