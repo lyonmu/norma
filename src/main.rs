@@ -1,3 +1,3 @@
 fn main() {
-    println!("Norma workbench shell");
+    norma::ui::shell::run();
 }
