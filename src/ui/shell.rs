@@ -4,7 +4,7 @@ use gpui::{
 };
 
 use crate::app_state::NormaAppState;
-use crate::ui::{components, sidebar, theme};
+use crate::ui::{components, execution, sidebar, theme};
 
 pub struct AppShell {
     state: NormaAppState,
@@ -43,9 +43,7 @@ impl Render for AppShell {
                             .flex_1()
                             .h_full()
                             .p_6()
-                            .child(components::section_title(
-                                self.state.session.thread.title.clone(),
-                            )),
+                            .child(execution::render_execution(&self.state.session)),
                     )
                     .child(
                         div()
