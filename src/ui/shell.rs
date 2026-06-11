@@ -1,13 +1,13 @@
 use std::sync::mpsc::Receiver;
 
 use gpui::{
-    App, Application, Bounds, Context, IntoElement, ParentElement, Render, Styled, Window,
-    WindowBounds, WindowOptions, div, point, prelude::*, px, size,
+    App, Application, Bounds, Context, IntoElement, ParentElement, Render, SharedString, Styled,
+    Window, WindowBounds, WindowOptions, div, point, prelude::*, px, size,
 };
 
 use crate::app_state::NormaAppState;
 use crate::runtime::RuntimeUpdate;
-use crate::ui::{components, execution, inspector, sidebar, theme};
+use crate::ui::{components, execution, inspector, settings::SettingsWindow, sidebar, theme};
 
 pub struct AppShell {
     state: NormaAppState,
@@ -31,7 +31,7 @@ impl Render for AppShell {
             .text_color(theme::text())
             .flex()
             .flex_col()
-            .child(top_toolbar())
+            .child(top_toolbar(&self.state))
             .child(
                 div()
                     .flex()
@@ -64,7 +64,7 @@ impl Render for AppShell {
     }
 }
 
-fn top_toolbar() -> impl IntoElement {
+fn top_toolbar(state: &NormaAppState) -> impl IntoElement {
     div()
         .h(theme::TOOLBAR_HEIGHT)
         .w_full()
@@ -101,8 +101,37 @@ fn top_toolbar() -> impl IntoElement {
                 .gap_2()
                 .child(components::icon_button("▶"))
                 .child(components::icon_button("🔔"))
-                .child(components::icon_button("⚙")),
+                .child(settings_button(state.config.clone())),
         )
+}
+
+fn settings_button(config: crate::config::AppConfig) -> impl IntoElement {
+    div()
+        .id(SharedString::from("settings-button"))
+        .w(px(32.))
+        .h(px(32.))
+        .rounded(px(8.))
+        .border_1()
+        .border_color(theme::border())
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(13.))
+        .text_color(theme::text())
+        .child("⚙")
+        .on_click(move |_, _, cx| {
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    point(px(180.), px(120.)),
+                    size(px(960.), px(720.)),
+                ))),
+                ..WindowOptions::default()
+            };
+            let config = config.clone();
+            cx.open_window(options, |_, cx| cx.new(|_| SettingsWindow::new(config)))
+                .expect("failed to open Norma settings window");
+        })
 }
 
 pub fn run(state: NormaAppState, updates: Receiver<RuntimeUpdate>) {
