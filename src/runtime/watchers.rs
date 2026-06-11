@@ -1,36 +1,20 @@
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::Context;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
-use crate::app::NormaAppState;
-use crate::config::ensure_config;
-use crate::config::{ConfigReload, ConfigState, NormaConfig, is_config_path_event};
-use crate::logging::{LoggingGuard, init_tracing, maintain_logs, start_log_maintenance};
-use crate::paths::{NormaPaths, default_paths};
-use crate::skills::{SkillIndex, SkillsReload, SkillsState, is_skills_path_event, scan_skills};
-
-#[derive(Debug, Clone)]
-pub enum RuntimeUpdate {
-    ConfigApplied(NormaConfig),
-    ConfigRejected(String),
-    SkillsApplied(SkillIndex),
-    SkillsRejected(String),
-}
+use crate::config::{ConfigReload, ConfigState, is_config_path_event};
+use crate::runtime::RuntimeUpdate;
+use crate::skills::{SkillsReload, SkillsState, is_skills_path_event};
 
 pub struct RuntimeWatchers {
     _config_watcher: RecommendedWatcher,
     _skills_watcher: RecommendedWatcher,
     _config_thread: thread::JoinHandle<()>,
     _skills_thread: thread::JoinHandle<()>,
-}
-
-pub fn runtime_update_channel() -> (Sender<RuntimeUpdate>, Receiver<RuntimeUpdate>) {
-    mpsc::channel()
 }
 
 pub fn start_watchers(
@@ -47,6 +31,13 @@ pub fn start_watchers(
     let (skills_tx, skills_rx) = mpsc::channel();
     let mut skills_watcher = notify::recommended_watcher(skills_tx)?;
     skills_watcher.watch(&skills_dir, RecursiveMode::Recursive)?;
+
+    tracing::info!(
+        component = "runtime",
+        config_path = %config_file.display(),
+        skills_dir = %skills_dir.display(),
+        "runtime watchers started"
+    );
 
     let config_updates = updates.clone();
     let config_thread = thread::spawn(move || {
@@ -75,6 +66,7 @@ fn debounce_config_events(
     loop {
         match events.recv_timeout(debounce) {
             Ok(Ok(event)) if is_config_path_event(&config_file, &event) => {
+                tracing::debug!(component = "runtime", path = %config_file.display(), "config watcher event received");
                 pending = true;
                 last_event = Instant::now();
             }
@@ -112,6 +104,7 @@ fn debounce_skills_events(
     loop {
         match events.recv_timeout(debounce) {
             Ok(Ok(event)) if is_skills_path_event(&skills_dir, &event) => {
+                tracing::debug!(component = "runtime", path = %skills_dir.display(), "skills watcher event received");
                 pending = true;
                 last_event = Instant::now();
             }
@@ -135,67 +128,4 @@ fn debounce_skills_events(
             Err(RecvTimeoutError::Disconnected) => break,
         }
     }
-}
-
-pub struct RuntimeContext {
-    pub paths: NormaPaths,
-    pub config: Arc<Mutex<ConfigState>>,
-    pub skills: Arc<Mutex<SkillsState>>,
-    pub logging: LoggingGuard,
-    pub watchers: RuntimeWatchers,
-    pub updates: Receiver<RuntimeUpdate>,
-    pub app_state: NormaAppState,
-}
-
-pub fn bootstrap() -> anyhow::Result<RuntimeContext> {
-    let paths = default_paths();
-    paths
-        .create_all()
-        .context("failed to create Norma directories")?;
-    let config = ensure_config(&paths).context("failed to load Norma config")?;
-    let logging = init_tracing(&paths.log_dir, &config.logging)
-        .context("failed to initialize Norma logging")?;
-    maintain_logs(
-        &paths.log_dir,
-        config.logging.retention_days,
-        config.logging.compress_rotated,
-    )
-    .context("failed to run startup log maintenance")?;
-    let _maintenance = start_log_maintenance(paths.log_dir.clone(), config.logging.clone());
-    let skill_index = scan_skills(&paths.skills_dir).unwrap_or_else(|error| {
-        tracing::warn!(error = %error, "failed to scan skills directory");
-        SkillIndex::default()
-    });
-    let config_state = Arc::new(Mutex::new(ConfigState::new(config.clone())));
-    let skills_state = Arc::new(Mutex::new(SkillsState::new(skill_index.clone())));
-    let (update_tx, update_rx) = runtime_update_channel();
-    let watchers = start_watchers(
-        paths.config_file.clone(),
-        paths.skills_dir.clone(),
-        config_state.clone(),
-        skills_state.clone(),
-        update_tx,
-    )
-    .context("failed to start Norma runtime watchers")?;
-    tracing::info!(
-        config_path = %paths.config_file.display(),
-        log_dir = %paths.log_dir.display(),
-        data_dir = %paths.data_dir.display(),
-        skills_dir = %paths.skills_dir.display(),
-        "norma runtime initialized"
-    );
-    let app_state = NormaAppState::load_current_project_with_runtime(
-        paths.clone(),
-        config.clone(),
-        skill_index.clone(),
-    );
-    Ok(RuntimeContext {
-        paths,
-        config: config_state,
-        skills: skills_state,
-        logging,
-        watchers,
-        updates: update_rx,
-        app_state,
-    })
 }
