@@ -1,21 +1,24 @@
 use std::path::PathBuf;
 
+use crate::agent::input::AgentRequest;
+use crate::agent::runtime::AgentRuntime;
 use crate::git::{ChangeKind, ChangedFile};
 use crate::session::{ChecklistItem, ExecutionStep, SessionEvent, StepStatus};
-
-pub trait AgentRuntime {
-    fn run_mock_task(&self, task: &str) -> Vec<SessionEvent>;
-}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct MockAgentRuntime;
 
 impl AgentRuntime for MockAgentRuntime {
-    fn run_mock_task(&self, task: &str) -> Vec<SessionEvent> {
-        tracing::info!(task, runtime = "mock", "agent task started");
-        vec![
+    fn run(&self, request: AgentRequest) -> Vec<SessionEvent> {
+        tracing::info!(
+            component = "agent",
+            runtime = "mock",
+            task = %request.task,
+            "agent task started"
+        );
+        let events = vec![
             SessionEvent::UserTask {
-                content: task.to_string(),
+                content: request.task.clone(),
             },
             SessionEvent::AgentPlan {
                 goal: "完善 Norma 的整体设计、架构、模块、数据流、UI、Git 交互".to_string(),
@@ -46,7 +49,15 @@ impl AgentRuntime for MockAgentRuntime {
                 ],
             },
             SessionEvent::StepUpdated(waiting_step()),
-        ]
+        ];
+        tracing::info!(
+            component = "agent",
+            runtime = "mock",
+            task = %request.task,
+            event_count = events.len(),
+            "agent task completed"
+        );
+        events
     }
 }
 
