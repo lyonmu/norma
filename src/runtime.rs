@@ -10,9 +10,9 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use crate::app_state::NormaAppState;
 use crate::config::ensure_config;
 use crate::config::{ConfigReload, ConfigState, NormaConfig, is_config_path_event};
+use crate::logging::{LoggingGuard, init_tracing, maintain_logs, start_log_maintenance};
 use crate::paths::{NormaPaths, default_paths};
 use crate::skills::{SkillIndex, SkillsReload, SkillsState, is_skills_path_event, scan_skills};
-use crate::telemetry::{TelemetryGuard, init_tracing, maintain_logs, start_log_maintenance};
 
 #[derive(Debug, Clone)]
 pub enum RuntimeUpdate {
@@ -141,7 +141,7 @@ pub struct RuntimeContext {
     pub paths: NormaPaths,
     pub config: Arc<Mutex<ConfigState>>,
     pub skills: Arc<Mutex<SkillsState>>,
-    pub telemetry: TelemetryGuard,
+    pub logging: LoggingGuard,
     pub watchers: RuntimeWatchers,
     pub updates: Receiver<RuntimeUpdate>,
     pub app_state: NormaAppState,
@@ -153,8 +153,8 @@ pub fn bootstrap() -> anyhow::Result<RuntimeContext> {
         .create_all()
         .context("failed to create Norma directories")?;
     let config = ensure_config(&paths).context("failed to load Norma config")?;
-    let telemetry = init_tracing(&paths.log_dir, &config.logging)
-        .context("failed to initialize Norma telemetry")?;
+    let logging = init_tracing(&paths.log_dir, &config.logging)
+        .context("failed to initialize Norma logging")?;
     maintain_logs(
         &paths.log_dir,
         config.logging.retention_days,
@@ -193,7 +193,7 @@ pub fn bootstrap() -> anyhow::Result<RuntimeContext> {
         paths,
         config: config_state,
         skills: skills_state,
-        telemetry,
+        logging,
         watchers,
         updates: update_rx,
         app_state,
