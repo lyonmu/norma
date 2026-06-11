@@ -4,7 +4,7 @@ use gpui::{
 };
 
 use crate::app_state::NormaAppState;
-use crate::ui::{components, execution, sidebar, theme};
+use crate::ui::{components, execution, inspector, sidebar, theme};
 
 pub struct AppShell {
     state: NormaAppState,
@@ -51,8 +51,7 @@ impl Render for AppShell {
                             .h_full()
                             .border_l_1()
                             .border_color(theme::border())
-                            .p_5()
-                            .child(components::section_title("检查器")),
+                            .child(inspector::render_inspector(&self.state)),
                     ),
             )
     }
