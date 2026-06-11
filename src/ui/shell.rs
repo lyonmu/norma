@@ -5,7 +5,7 @@ use gpui::{
     Window, WindowBounds, WindowOptions, div, point, prelude::*, px, size,
 };
 
-use crate::app_state::NormaAppState;
+use crate::app::NormaAppState;
 use crate::runtime::RuntimeUpdate;
 use crate::ui::{components, execution, inspector, settings::SettingsWindow, sidebar, theme};
 

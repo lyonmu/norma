@@ -1,8 +1,7 @@
 use std::env;
 
 use crate::agent::{AgentRuntime, MockAgentRuntime};
-use crate::config::AppConfig;
-use crate::config::NormaConfig;
+use crate::config::{AppConfig, NormaConfig};
 use crate::git::{GitStatusSummary, read_status};
 use crate::paths::NormaPaths;
 use crate::runtime::RuntimeUpdate;
@@ -69,6 +68,7 @@ impl NormaAppState {
 
     pub fn load_project(root: impl Into<std::path::PathBuf>) -> Self {
         let root = root.into();
+        tracing::info!(component = "app", root = %root.display(), "loading project state");
         let project = match open_project(&root) {
             Ok(project) => project,
             Err(error) => {
@@ -88,7 +88,15 @@ impl NormaAppState {
             }
         };
 
-        let files = load_file_tree(&project.root, 80).unwrap_or_else(|_| sample_file_tree());
+        let files = load_file_tree(&project.root, 80).unwrap_or_else(|error| {
+            tracing::warn!(
+                component = "app",
+                root = %project.root.display(),
+                error = %error,
+                "file tree fallback used"
+            );
+            sample_file_tree()
+        });
         let git = read_status(&project.root);
 
         let runtime = MockAgentRuntime;
@@ -125,9 +133,15 @@ impl NormaAppState {
         match update {
             RuntimeUpdate::ConfigApplied(config) => {
                 self.runtime_config = Some(config);
+                tracing::info!(component = "app", "runtime config update applied");
             }
             RuntimeUpdate::SkillsApplied(skills) => {
                 self.runtime_skills = skills;
+                tracing::info!(
+                    component = "app",
+                    skill_count = self.runtime_skills.entries.len(),
+                    "runtime skills update applied"
+                );
             }
             RuntimeUpdate::ConfigRejected(message) | RuntimeUpdate::SkillsRejected(message) => {
                 tracing::warn!(error = %message, "runtime update rejected");

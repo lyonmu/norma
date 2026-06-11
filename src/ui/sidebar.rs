@@ -1,6 +1,6 @@
 use gpui::{AnyElement, ParentElement, Styled, div, prelude::*, px};
 
-use crate::app_state::NormaAppState;
+use crate::app::NormaAppState;
 use crate::ui::{components, theme};
 use crate::workspace::FileKind;
 

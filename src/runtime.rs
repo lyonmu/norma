@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
-use crate::app_state::NormaAppState;
+use crate::app::NormaAppState;
 use crate::config::ensure_config;
 use crate::config::{ConfigReload, ConfigState, NormaConfig, is_config_path_event};
 use crate::logging::{LoggingGuard, init_tracing, maintain_logs, start_log_maintenance};

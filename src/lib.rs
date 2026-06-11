@@ -1,5 +1,5 @@
 pub mod agent;
-pub mod app_state;
+pub mod app;
 pub mod config;
 pub mod git;
 pub mod logging;
