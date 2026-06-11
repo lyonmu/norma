@@ -2,63 +2,131 @@
 
 ## Project Summary
 
-Norma is a Rust 2024 desktop-agent project. The current implementation is still a minimal binary (`src/main.rs` prints `Hello, world!`), while `README.md`, `README.zh.md`, and `Cargo.toml` describe the intended GPUI-based agent product. Treat the code as the source of truth: do not claim multi-model, MCP, ACP, Skills, sub-agent, or multi-agent runtime support is implemented until the corresponding Rust modules exist.
+Norma is a Rust 2024 desktop agent/workbench built with Cargo and GPUI. The current code implements a GPUI workbench shell, local project/file context, read-only Git status summaries, mock agent session events, app settings preview UI, local `~/.norma` paths, TOML configuration, structured tracing logs, config/skills watchers, and a non-executing Skills directory index.
 
-The active V1 direction is documented under `docs/superpowers/`: a GPUI project workbench shell with real local project/file and read-only Git context, mock agent events, and disabled or preview-only review actions.
+README files and package metadata describe the broader product direction: multi-model providers, MCP, ACP, Skills, sub-agents, and multi-agent collaboration. Treat those as roadmap unless the corresponding Rust modules and tests exist. Current provider settings are preview-only; they do not perform real model calls or network connection tests.
 
-## Tech Stack & Dependencies
+## Tech Stack & Core Dependencies
 
-- Language/tooling: Rust 2024, Cargo, rustfmt.
-- Runtime/UI dependency: `gpui`; `Cargo.lock` currently resolves it to `0.2.2`.
-- Packaging metadata: `Cargo.toml` contains `package.metadata.bundle` and `package.metadata.deb`.
-- Assets: current visible app asset is `asset/img/icon.png`.
+- Rust 2024, Cargo, rustfmt, Clippy.
+- GPUI `0.2.2` for native desktop UI.
+- Runtime/config: `anyhow`, `serde`, `toml`, `config`, `notify`, `thiserror`.
+- Logging: `tracing`, `tracing-subscriber`, `tracing-appender`, `flate2`.
+- Project context: `ignore` for file tree traversal, read-only `git status` via `std::process::Command`.
+- Tests: Rust unit tests plus `tempfile`; manual visual checklists in `tests/*.md`.
 
-Do not reintroduce `gpui_platform`; the public dependency used by this crate is `gpui`.
+Do not add `gpui_platform`; this crate depends on `gpui`.
 
-## Repository Layout
+## Current Directory Structure
 
-- `src/main.rs`: current executable entry point. Keep it small as the app grows.
-- `asset/`: static assets; preserve existing icons unless intentionally updating branding.
-- `docs/superpowers/specs/`: product/design specs and reference assets.
-- `docs/superpowers/plans/`: implementation plans. Follow these when implementing the V1 workbench.
-- `README.md` and `README.zh.md`: user-facing docs.
-- `Cargo.toml` and `Cargo.lock`: crate config, dependencies, and packaging metadata.
-- `target/`: build output; never edit or commit generated files from here.
+- `src/main.rs`: thin bootstrap only.
+- `src/lib.rs`: module exports only.
+- `src/runtime.rs`: startup orchestration for paths, config, telemetry, skills, watchers, and app state.
+- `src/paths.rs`: local `~/.norma` path contract.
+- `src/config.rs`: settings models, provider preview data, TOML config, validation, environment overrides, reload state.
+- `src/telemetry.rs`: current tracing initialization, JSON log writing, rotation, compression, retention.
+- `src/skills.rs`: scans `~/.norma/skills` without executing skills.
+- `src/workspace.rs`, `src/git.rs`, `src/session.rs`, `src/agent.rs`, `src/app_state.rs`: project state, read-only Git, session events, mock runtime, and aggregate app state.
+- `src/ui/`: GPUI views and helpers, including workbench shell, sidebar, execution stream, inspector, settings window, components, and theme.
+- `docs/superpowers/`: product specs, implementation plans, and reference images.
+- `tests/*.md`: manual visual/runtime verification checklists.
+- `asset/`: static assets; current icon is `asset/img/icon.png`.
+- `target/`: generated build output; do not edit or commit.
 
 ## Commands
 
-- `cargo run`: build and run the current binary.
-- `cargo check`: type-check the crate; run before finishing code changes.
-- `cargo test`: run unit/integration tests when present.
-- `cargo fmt --check`: verify formatting.
+- `cargo run`: run the desktop app.
+- `cargo check`: type-check all reachable Rust code.
+- `cargo test`: run unit tests.
+- `cargo fmt --check`: verify Rust formatting.
 - `cargo fmt`: apply Rust formatting.
-- `cargo clippy --all-targets -- -D warnings`: lint when the Clippy component is installed.
-- `cargo build --release`: build the release binary referenced by packaging metadata.
+- `cargo clippy --all-targets -- -D warnings`: run lint checks.
+- `cargo build --release`: build the release binary referenced by package metadata.
+- `cargo metadata --no-deps --format-version 1`: inspect crate/package metadata.
 
-There are no Make, npm, pnpm, or shell task scripts in the current repository.
+There are no Make, npm, pnpm, or shell task scripts in the repository.
 
-## Code Style & Architecture
+## Structured Logging
 
-Use standard Rust naming: `snake_case` functions/modules, `PascalCase` types/traits, and `SCREAMING_SNAKE_CASE` constants. Keep public APIs small and document non-obvious behavior with concise doc comments.
+Use `tracing` macros for runtime diagnostics: `trace!`, `debug!`, `info!`, `warn!`, and `error!`. Log application startup, config loading/reload, watcher events, key state transitions, external calls, and errors with context.
 
-As the app grows, avoid large logic blocks in `main.rs`. Prefer focused modules aligned with the V1 plan, such as `ui`, `workspace`, `git`, `session`, `agent`, `config`, and app state. In V1, Git operations must be read-only unless a later spec explicitly changes that boundary; destructive actions such as reset, checkout, discard, or patch application should remain disabled or preview-only.
+Do not use `println!`, `eprintln!`, `dbg!`, manual `stdout`/`stderr` writes, or ad hoc `std::fmt` output for logs or debugging. The only exception is a future CLI command whose purpose is to print a final user-facing result.
 
-## Agent Rules
+Prefer structured fields:
 
-- Inspect the current checkout before editing; avoid copying README claims into code or docs as implemented facts.
-- Preserve `Cargo.lock`; this is an application crate.
-- Keep README language pairs in sync when changing user-facing behavior.
-- For UI work, respect the visual contract in `docs/superpowers/specs/2026-06-11-norma-project-workbench-design.md` and the reference image beside it.
-- Do not commit secrets, API keys, model tokens, MCP credentials, or machine-local config.
-- Be cautious when editing `Cargo.toml` packaging metadata, `asset/`, and `docs/superpowers/`; these files define product direction, packaging, or visual targets.
+```rust
+tracing::info!(component = "config", path = %config_path.display(), "config loaded");
+tracing::warn!(error = %err, "failed to load config");
+```
 
-## Pre-Submission Checklist
+Never log secrets, API keys, model tokens, MCP credentials, or private config values. Avoid high-volume `info!` logs in GPUI render paths; use `debug!` or `trace!` sparingly.
 
-Before handing off code changes:
+## Modular Organization
+
+Keep `main.rs` and `lib.rs` free of business logic. `main.rs` should bootstrap runtime and UI; `lib.rs` should export modules.
+
+Organize new independent capabilities as module directories rather than piling logic into one file. For example, new logging work should move toward:
+
+```text
+src/logging/
+  mod.rs
+  config.rs
+  init.rs
+  layer.rs
+```
+
+Use clear domain boundaries: config loading in config modules, tracing setup in logging/telemetry modules, UI in `src/ui/`, agent runtime in agent modules, and future LLM, MCP, ACP, Skill, and Subagent features in their own domain modules. If a current single-file module receives substantial new behavior, prefer splitting it into a directory as part of that change.
+
+## Code Style
+
+Use rustfmt defaults. Name functions and modules in `snake_case`, types and traits in `PascalCase`, and constants in `SCREAMING_SNAKE_CASE`. Keep public APIs narrow and document non-obvious behavior with concise doc comments. Use typed errors with context; preserve the existing pattern of `thiserror` for domain errors and `anyhow` at orchestration boundaries.
+
+V1 Git behavior is read-only. Do not add reset, checkout, discard, patch application, or destructive Git operations unless a newer spec explicitly changes the boundary and tests cover it.
+
+## Git Commit Convention
+
+Use Conventional Commits:
+
+```text
+<type>(optional scope): <summary>
+```
+
+Recommended types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `style`, `perf`.
+
+Examples:
+
+- `feat(agent): add subagent execution pipeline`
+- `refactor(logging): split tracing initialization into module`
+- `docs: update AGENTS.md for current project structure`
+
+Summaries must be short, clear English. Avoid vague messages such as `update` or `fix bug`. Keep each commit focused on one topic; do not mix unrelated docs, runtime, UI, and dependency changes.
+
+## Files And Directories Requiring Care
+
+- `Cargo.toml` and `Cargo.lock`: keep dependency/package changes intentional and committed together.
+- `Cargo.toml` package metadata: bundle/deb settings affect release packaging.
+- `docs/superpowers/`: specs and plans are product contracts; update them only when intentionally changing scope.
+- `asset/`: avoid replacing branding assets incidentally.
+- `src/telemetry.rs` / future logging modules: maintain non-blocking structured JSON logging semantics.
+- `src/config.rs`: never store real secrets in sample data, tests, screenshots, or defaults.
+- `~/.norma/`: generated local runtime state outside the repo; do not copy it into version control.
+- `target/`: generated output; never edit or commit.
+
+## Agent Checklist
+
+Before editing:
+
+1. Read the relevant code, docs, and tests for the area.
+2. Check `git status --short` and avoid overwriting unrelated user changes.
+3. Verify whether README/docs claims are implemented in code before repeating them.
+4. Decide whether a new feature belongs in a new module directory.
+5. Plan logging points and ensure they use `tracing` with structured fields.
+
+Before handoff:
 
 1. Run `cargo fmt --check`.
 2. Run `cargo check`.
 3. Run `cargo test`.
-4. Run `cargo clippy --all-targets -- -D warnings` when available.
-5. For UI changes, compare the GPUI window against the relevant `docs/superpowers` spec or checklist and include screenshots/notes.
-6. State any command that could not run and the exact reason.
+4. Run `cargo clippy --all-targets -- -D warnings`.
+5. For UI changes, run `cargo run` and compare against the relevant `docs/superpowers` visual checklist.
+6. Report any commands that could not run, including exact failure reasons.
