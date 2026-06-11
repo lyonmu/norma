@@ -20,7 +20,7 @@ Norma is not a code editor and should not try to replace VS Code, Zed, or other 
 - agent execution traces
 - diff and change summaries
 - compare-view entry points
-- safe Git rollback and undo operations
+- safe Git rollback and undo operations in later phases
 - future model, MCP, Skills, ACP, and multi-agent orchestration surfaces
 
 The V1 product flow is:
@@ -45,7 +45,7 @@ The V1 product flow is:
 - `AgentRuntime` abstraction.
 - `MockAgentRuntime` that emits deterministic project-task events.
 - Dynamic inspector modes for context, changes, and approval.
-- Disabled or mock-safe affordances for future compare, revert, and undo actions.
+- Disabled or mock-safe affordances for future compare, revert, and undo actions; V1 must not perform destructive Git operations.
 - Clear documentation of what is implemented now and what remains future work.
 
 ### Out Of Scope For V1
@@ -75,6 +75,37 @@ Norma should be split into small modules under `src/` as the codebase grows:
 
 ## UI Design
 
+### Visual Contract
+
+The implementation should treat `assets/norma-review-first-codex-workbench.png` as the primary visual target. The spec is not asking for a loose three-column dashboard; it is asking for the same product shape, hierarchy, density, and review-first feel shown in the reference image.
+
+The app should be designed for a primary desktop window near `1440x1024`. The bundled reference image is `1487x1058`; implementation may adapt to GPUI and platform chrome, but the relative layout should remain close to the image.
+
+Required visual qualities:
+
+- light native desktop surface, not a dark IDE and not a web dashboard
+- white content surfaces on a very light gray app background
+- thin hairline dividers between toolbar, columns, list rows, and inspector sections
+- compact 13-15px product typography with clear but restrained hierarchy
+- small icon-led controls for toolbar, thread rows, file rows, inspector actions, and Git actions
+- 8-12px corner radius for cards, controls, and grouped surfaces
+- blue accent for selected navigation, active inspector tab, focused cards, and in-progress status
+- green accent for completed, safe, and added-line states
+- red accent for deleted-line and destructive-action states
+- minimal shadows; prefer spacing, tint, and dividers over elevation
+- no decorative illustration, no gradient blobs, no marketing hero, no cards inside cards
+
+### Screen Inventory From Reference
+
+The V1 screen should include these areas from the selected design:
+
+- Top toolbar: Norma brand, back/forward navigation affordances, model selector, runtime/environment selector, local status indicator, safety level control, run/continue action, notification icon, settings icon, and user/avatar placeholder.
+- Left sidebar: current project card, grouped thread list by recency, project files tree, refresh/more actions, and Git status card with branch, changed/added/deleted counts, and ahead/behind summary.
+- Center work stream: task title with edit affordance, task summary block with goal/constraints/status, vertical execution timeline, completed step cards, active step card, pending step card, and bottom input composer.
+- Right inspector: top tabs for inspector/context/output/settings, active inspector underline, change overview metrics, safety check row, changed files list with filters/view controls, selected file change preview with hunk summaries, and Git operation rows.
+
+If an implementation cannot include one of these items in the first GPUI pass, it should include an explicit empty, disabled, or mock state in the same location rather than removing the area entirely. This keeps the V1 visual structure aligned with the reference while preserving the current functional scope.
+
 ### Layout
 
 The main window uses three columns:
@@ -83,7 +114,35 @@ The main window uses three columns:
 - Center: Codex-style execution stream.
 - Right: dynamic inspector.
 
+Recommended proportions for the primary desktop layout:
+
+- top toolbar: about 56px tall
+- left sidebar: about 320px wide, with a minimum near 280px
+- center stream: flexible main region, roughly 650-730px at the target size
+- right inspector: about 400-420px wide, with a minimum near 360px
+- column gutters/dividers: 1px dividers plus 16-24px internal padding depending on section density
+
 The UI should not look like a wireframe or generic dashboard. It should use a native desktop feel with efficient spacing, readable 13-15px product typography, subtle separators, minimal borders, and restrained accent colors.
+
+### Top Toolbar
+
+The top toolbar is part of V1's visual contract even if some controls are mock or disabled. It should include:
+
+- app identity: small Norma icon and `Norma` wordmark
+- navigation affordances: back and forward icons
+- model selector: label such as `模型 GPT-4.1`
+- runtime/environment selector: label such as `运行环境 本地` with a green local status dot
+- safety level control: label such as `安全级别 标准`
+- primary run or continue icon button
+- notification icon
+- settings icon
+- user/avatar placeholder
+
+Toolbar controls should be compact and quiet. They should not dominate the page or look like a settings dashboard.
+
+### Empty And Initial State
+
+When no project is open, Norma should keep the same shell proportions but show a simple project-open state in the center and an inactive inspector. After a project is open but before a thread exists, the center should guide the user to create a task thread while the left sidebar can already show files and Git status.
 
 ### Left Sidebar
 
@@ -97,6 +156,15 @@ The left sidebar is project and thread first. It includes:
 - small settings/capabilities entry
 
 MCP, Skills, model selection, and automation should not become a dense control panel in V1. They can appear as small future-facing entry points.
+
+The reference image makes the left sidebar visually dense but quiet. V1 should match these concrete sections:
+
+- project card: icon, project name, shortened path, dropdown affordance
+- thread section: recency groups such as `今天`, `昨天`, `本周`; selected thread highlighted with a soft blue row
+- project files section: collapsible folders and file rows with small file/folder icons
+- Git status card: branch name, changed/added/deleted counts, and upstream delta
+
+The sidebar should use row selection, small labels, and separators rather than individual cards for every row.
 
 ### Center Execution Stream
 
@@ -112,6 +180,18 @@ The center is not a chat bubble UI. It is a task thread that shows what happened
 - error events
 
 Events should be compact, chronologically ordered, and easy to scan. Details can be collapsed, but the user should always understand the agent's next step and current state.
+
+The reference center stream has these required pieces:
+
+- task header: title such as `完善 Norma 项目设计` with an edit icon
+- task summary block: `目标`, `约束`, and `状态`
+- timeline rail: a subtle vertical line connecting execution cards
+- completed cards: green check icon, title, short description, completed pill, duration, collapse affordance
+- active card: blue in-progress marker, highlighted border/tint, nested checklist with completed/current/pending states
+- pending card: muted status with waiting label
+- bottom composer: input field plus compact controls such as add context, use tools, auto-run, and send
+
+`MockAgentRuntime` should emit enough events to populate each of these visual states. If a state is not functionally real yet, it can be deterministic mock data, but it should still exercise the UI.
 
 ### Right Dynamic Inspector
 
@@ -133,6 +213,73 @@ When there are changes, the inspector becomes a review dashboard. It should show
 - open external editor action
 
 V1 may show disabled or mock states for actions that are not safe or implemented yet. The design must make the boundary visible.
+
+The reference right inspector has a review dashboard layout. V1 should include:
+
+- inspector tabs: `检查器`, `上下文`, `输出`, `设置`; `检查器` active by default
+- change overview metrics: changed files, added lines, deleted lines, confidence/safety percentage
+- safety check row: safe/unsafe status and short reason
+- changed files list: file path, status icon, added/deleted line counts, selected file highlight, filter dropdown, view-toggle icons
+- selected file preview: file path, number of hunks, total line counts, compare action, revert file action
+- hunk rows: hunk number, line range, added/deleted counts, collapsed disclosure affordance
+- Git operations section: undo agent change, discard/revert selected change, open in external editor
+
+For V1, `Compare`, `Revert file`, `Undo last agent change`, and discard-style operations must either be disabled, mock-safe, or explicitly marked as preview-only. They must not run destructive Git actions in V1.
+
+### Visual Acceptance Criteria
+
+The UI implementation is visually acceptable for V1 only if:
+
+- the first screen clearly matches the reference image's three-column proportions and top toolbar structure
+- the left sidebar has a project card, grouped thread list, file tree, and Git status card
+- the center stream shows at least one completed card, one active card, one pending card, and the bottom composer
+- the right inspector shows the full review dashboard structure with metrics, safety row, changed files, selected-file hunk preview, and Git operation rows
+- the app does not include a code editor or large code pane
+- disabled/mock actions are visually distinct from available actions
+- the page still looks polished at the target desktop size, without overlapping text or clipped controls
+
+### Implementation Notes For GPUI
+
+Build UI components around the screen inventory rather than one large root view. Suggested view/component boundaries:
+
+- `AppShell`
+- `TopToolbar`
+- `ProjectSidebar`
+- `ThreadList`
+- `ProjectFileTree`
+- `GitStatusCard`
+- `ExecutionStream`
+- `ExecutionCard`
+- `TaskComposer`
+- `DynamicInspector`
+- `ChangeOverview`
+- `ChangedFileList`
+- `FileChangePreview`
+- `GitOperations`
+
+These names are not mandatory, but implementation should preserve similarly small, testable boundaries.
+
+### V1 Git Action Boundary
+
+V1 reads Git status and displays Git review UI. It does not perform destructive Git operations.
+
+Allowed in V1:
+
+- read repository status
+- summarize changed, added, deleted, and untracked files
+- show mock or computed line-count summaries when safe
+- render compare/revert/undo/open-editor entry points
+- show disabled, preview-only, or mock-safe action states
+
+Not allowed in V1:
+
+- discard user changes
+- reset files
+- apply patches
+- checkout files
+- run hidden destructive Git commands
+
+The roadmap can enable real Git actions later only after confirmation flows and affected-file summaries are implemented.
 
 ## Data Flow
 
@@ -156,6 +303,7 @@ The exact names can evolve, but the design should preserve these boundaries:
 - `FileNode`: path, kind, children, optional status.
 - `GitStatusSummary`: repository state, changed count, untracked count, branch, error.
 - `ChangedFile`: path, status, inserted lines, deleted lines, hunk count.
+- `DiffHunkSummary`: hunk index, line range, inserted lines, deleted lines, collapsed/expanded state.
 - `SessionThread`: id, project id, title, created/updated timestamps.
 - `SessionEvent`: user message, agent plan, tool call, command output, change summary, final response, error.
 - `InspectorMode`: context, changes, approval.
@@ -219,9 +367,11 @@ Minimum V1 tests:
 
 - `workspace`: project name parsing, file tree loading, missing path, non-directory path, permission-like failures where practical.
 - `git`: status parsing, non-Git directory, changed/untracked/renamed files, command failure handling.
+- `git`: no V1 path may execute destructive Git actions such as reset, checkout, restore, clean, or patch application.
 - `session`: event append order, derived session state, inspector mode switching.
 - `agent`: mock runtime event sequence and cancellation/error behavior.
 - `ui`: smoke test or manual verification that the GPUI window shows the three-column shell and key empty/error states.
+- `ui`: manual visual verification against `assets/norma-review-first-codex-workbench.png` at a desktop size near `1440x1024`.
 
 Validation commands before submitting implementation work:
 
@@ -229,18 +379,30 @@ Validation commands before submitting implementation work:
 - `cargo check`
 - `cargo test`
 
+Manual visual verification checklist:
+
+- top toolbar matches the reference structure
+- left sidebar contains the project card, grouped threads, file tree, and Git card
+- center stream includes task header, summary block, timeline cards, and composer
+- right inspector includes tabs, metrics, safety row, changed file list, hunk preview, and Git operation rows
+- no embedded editor appears
+- no destructive Git action is enabled in V1
+- spacing, type sizes, colors, and dividers remain close to the reference image
+
 ## Roadmap
 
 ### V1: Project Workbench Shell
 
 - Three-column GPUI workbench.
 - Review-First Codex visual direction.
+- Top toolbar matching the selected reference structure.
 - Project/thread sidebar.
 - Execution stream.
 - Dynamic inspector.
 - Real file tree.
 - Basic Git status.
 - Mock runtime.
+- Disabled or preview-only compare/revert/undo/open-editor actions.
 
 ### V1.1: Read-Only Diff Review
 
