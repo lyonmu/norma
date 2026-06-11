@@ -12,6 +12,7 @@ pub struct MockAgentRuntime;
 
 impl AgentRuntime for MockAgentRuntime {
     fn run_mock_task(&self, task: &str) -> Vec<SessionEvent> {
+        tracing::info!(task, runtime = "mock", "agent task started");
         vec![
             SessionEvent::UserTask {
                 content: task.to_string(),

@@ -2,8 +2,12 @@ use std::env;
 
 use crate::agent::{AgentRuntime, MockAgentRuntime};
 use crate::config::AppConfig;
+use crate::config::NormaConfig;
 use crate::git::{GitStatusSummary, read_status};
+use crate::paths::NormaPaths;
+use crate::runtime::RuntimeUpdate;
 use crate::session::{SessionState, sample_thread};
+use crate::skills::SkillIndex;
 use crate::workspace::{FileNode, Project, load_file_tree, open_project, sample_file_tree};
 
 #[derive(Debug, Clone)]
@@ -23,6 +27,9 @@ pub struct NormaAppState {
     pub git: GitStatusSummary,
     pub session: SessionState,
     pub config: AppConfig,
+    pub runtime_paths: Option<NormaPaths>,
+    pub runtime_config: Option<NormaConfig>,
+    pub runtime_skills: SkillIndex,
 }
 
 impl NormaAppState {
@@ -49,6 +56,9 @@ impl NormaAppState {
             git: GitStatusSummary::unavailable("no project open"),
             session: SessionState::new(sample_thread()),
             config: AppConfig::sample(),
+            runtime_paths: None,
+            runtime_config: None,
+            runtime_skills: SkillIndex::default(),
         }
     }
 
@@ -71,6 +81,9 @@ impl NormaAppState {
                     git: GitStatusSummary::unavailable("project could not be opened"),
                     session: SessionState::new(sample_thread()),
                     config: AppConfig::sample(),
+                    runtime_paths: None,
+                    runtime_config: None,
+                    runtime_skills: SkillIndex::default(),
                 };
             }
         };
@@ -90,6 +103,35 @@ impl NormaAppState {
             git,
             session,
             config: AppConfig::sample(),
+            runtime_paths: None,
+            runtime_config: None,
+            runtime_skills: SkillIndex::default(),
+        }
+    }
+
+    pub fn load_current_project_with_runtime(
+        paths: NormaPaths,
+        config: NormaConfig,
+        skills: SkillIndex,
+    ) -> Self {
+        let mut state = Self::load_current_project();
+        state.runtime_paths = Some(paths);
+        state.runtime_config = Some(config);
+        state.runtime_skills = skills;
+        state
+    }
+
+    pub fn apply_runtime_update(&mut self, update: RuntimeUpdate) {
+        match update {
+            RuntimeUpdate::ConfigApplied(config) => {
+                self.runtime_config = Some(config);
+            }
+            RuntimeUpdate::SkillsApplied(skills) => {
+                self.runtime_skills = skills;
+            }
+            RuntimeUpdate::ConfigRejected(message) | RuntimeUpdate::SkillsRejected(message) => {
+                tracing::warn!(error = %message, "runtime update rejected");
+            }
         }
     }
 }
@@ -120,7 +162,10 @@ mod tests {
     fn app_state_includes_preview_provider_config() {
         let state = NormaAppState::no_project();
         assert_eq!(state.config.providers.len(), 2);
-        assert_eq!(state.config.selected_provider().unwrap().name, "OpenAI 默认");
+        assert_eq!(
+            state.config.selected_provider().unwrap().name,
+            "OpenAI 默认"
+        );
     }
 
     #[test]

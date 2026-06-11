@@ -1,23 +1,30 @@
+use std::sync::mpsc::Receiver;
+
 use gpui::{
     App, Application, Bounds, Context, IntoElement, ParentElement, Render, Styled, Window,
     WindowBounds, WindowOptions, div, point, prelude::*, px, size,
 };
 
 use crate::app_state::NormaAppState;
+use crate::runtime::RuntimeUpdate;
 use crate::ui::{components, execution, inspector, sidebar, theme};
 
 pub struct AppShell {
     state: NormaAppState,
+    updates: Receiver<RuntimeUpdate>,
 }
 
 impl AppShell {
-    pub fn new(state: NormaAppState) -> Self {
-        Self { state }
+    pub fn new(state: NormaAppState, updates: Receiver<RuntimeUpdate>) -> Self {
+        Self { state, updates }
     }
 }
 
 impl Render for AppShell {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        while let Ok(update) = self.updates.try_recv() {
+            self.state.apply_runtime_update(update);
+        }
         div()
             .size_full()
             .bg(theme::app_bg())
@@ -98,9 +105,8 @@ fn top_toolbar() -> impl IntoElement {
         )
 }
 
-pub fn run() {
-    Application::new().run(|cx: &mut App| {
-        let state = NormaAppState::load_current_project();
+pub fn run(state: NormaAppState, updates: Receiver<RuntimeUpdate>) {
+    Application::new().run(move |cx: &mut App| {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::new(
                 point(px(80.), px(80.)),
@@ -108,7 +114,7 @@ pub fn run() {
             ))),
             ..WindowOptions::default()
         };
-        cx.open_window(options, |_, cx| cx.new(|_| AppShell::new(state)))
+        cx.open_window(options, |_, cx| cx.new(|_| AppShell::new(state, updates)))
             .expect("failed to open Norma window");
     });
 }

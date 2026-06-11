@@ -61,6 +61,11 @@ pub fn open_project(path: impl AsRef<Path>) -> Result<Project, WorkspaceError> {
         .and_then(|value| value.to_str())
         .unwrap_or("Project")
         .to_string();
+    tracing::info!(
+        project = %name,
+        root = %root.display(),
+        "project opened"
+    );
     Ok(Project { name, root })
 }
 

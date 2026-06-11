@@ -63,3 +63,13 @@ Compare against `docs/superpowers/specs/assets/norma-review-first-codex-workbenc
 - [ ] Red for deleted/destructive states
 - [ ] Minimal shadows; prefer spacing and dividers
 - [ ] No decorative illustration or gradient blobs
+
+## Runtime Infrastructure Checks
+
+- [ ] First launch creates `~/.norma/config.toml`.
+- [ ] First launch creates `~/.norma/log`.
+- [ ] First launch creates `~/.norma/data`.
+- [ ] First launch creates `~/.norma/skills`.
+- [ ] `~/.norma/log/norma.log` contains one JSON object per line.
+- [ ] Editing `~/.norma/config.toml` to a valid logging level keeps the app running.
+- [ ] Editing `~/.norma/config.toml` to an invalid logging level keeps the last good config active and records an error.

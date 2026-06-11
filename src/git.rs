@@ -62,6 +62,10 @@ impl GitStatusSummary {
 }
 
 pub fn read_status(root: impl AsRef<Path>) -> GitStatusSummary {
+    tracing::debug!(
+        root = %root.as_ref().display(),
+        "reading git status"
+    );
     let output = Command::new("git")
         .arg("-C")
         .arg(root.as_ref())
