@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use gpui::{
-    AnyElement, Context, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, Window, div, px,
+    AnyElement, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render,
+    SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
 
 use crate::agent::provider::{ProviderCandidate, ProviderService};
@@ -11,7 +11,7 @@ use crate::config::{
     AppConfig, ConfigError, NormaConfig, ProviderApiType, ProviderConfigStatus, SettingsSection,
     write_config,
 };
-use crate::ui::{components, theme};
+use crate::ui::{components, theme, text_input::TextInput};
 
 #[derive(Clone)]
 struct SettingsWindowState {
@@ -22,6 +22,11 @@ struct SettingsWindowState {
 
 pub struct SettingsWindow {
     state: Arc<Mutex<SettingsWindowState>>,
+    name_input: Option<Entity<TextInput>>,
+    base_url_input: Option<Entity<TextInput>>,
+    api_key_input: Option<Entity<TextInput>>,
+    model_input: Option<Entity<TextInput>>,
+    current_provider_id: Option<String>,
 }
 
 impl SettingsWindow {
@@ -36,6 +41,11 @@ impl SettingsWindow {
                 persisted_config,
                 config_file,
             })),
+            name_input: None,
+            base_url_input: None,
+            api_key_input: None,
+            model_input: None,
+            current_provider_id: None,
         }
     }
 }
@@ -136,8 +146,78 @@ impl SettingsWindowState {
 }
 
 impl Render for SettingsWindow {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let config = self.state.lock().unwrap().config.clone();
+        
+        // Update TextInput entities when selected provider changes
+        let selected_id = config.selected_provider_id.clone();
+        if self.current_provider_id != selected_id {
+            self.current_provider_id = selected_id;
+            if let Some(provider) = config.selected_provider() {
+                // Create TextInput entities with on_change callbacks
+                let state = Arc::clone(&self.state);
+                let provider_id = provider.id.clone();
+                let state_clone = state.clone();
+                let provider_id_clone = provider_id.clone();
+                let state_clone2 = state.clone();
+                let provider_id_clone2 = provider_id.clone();
+                let state_clone3 = state.clone();
+                let provider_id_clone3 = provider_id.clone();
+                
+                self.name_input = Some(TextInput::new_with_callback(
+                    cx,
+                    "提供商名称",
+                    &provider.name,
+                    Some(Box::new(move |content| {
+                        let mut guard = state.lock().unwrap();
+                        if let Some(provider) = guard.config.selected_provider_mut() {
+                            provider.name = content;
+                            tracing::info!(component = "settings", provider_id = %provider_id, "name updated");
+                        }
+                    })),
+                ));
+                
+                self.base_url_input = Some(TextInput::new_with_callback(
+                    cx,
+                    "Base URL",
+                    &provider.base_url,
+                    Some(Box::new(move |content| {
+                        let mut guard = state_clone.lock().unwrap();
+                        if let Some(provider) = guard.config.selected_provider_mut() {
+                            provider.base_url = content;
+                            tracing::info!(component = "settings", provider_id = %provider_id_clone, "base_url updated");
+                        }
+                    })),
+                ));
+                
+                self.api_key_input = Some(TextInput::new_with_callback(
+                    cx,
+                    "API Key",
+                    &provider.api_key_reference,
+                    Some(Box::new(move |content| {
+                        let mut guard = state_clone2.lock().unwrap();
+                        if let Some(provider) = guard.config.selected_provider_mut() {
+                            provider.api_key_reference = content;
+                            tracing::info!(component = "settings", provider_id = %provider_id_clone2, "api_key updated");
+                        }
+                    })),
+                ));
+                
+                self.model_input = Some(TextInput::new_with_callback(
+                    cx,
+                    "模型 ID",
+                    &provider.model,
+                    Some(Box::new(move |content| {
+                        let mut guard = state_clone3.lock().unwrap();
+                        if let Some(provider) = guard.config.selected_provider_mut() {
+                            provider.model = content;
+                            tracing::info!(component = "settings", provider_id = %provider_id_clone3, "model updated");
+                        }
+                    })),
+                ));
+            }
+        }
+        
         div()
             .size_full()
             .bg(theme::app_bg())
@@ -155,7 +235,7 @@ impl Render for SettingsWindow {
                         div()
                             .flex_1()
                             .p_6()
-                            .child(settings_content(&self.state, &config)),
+                            .child(settings_content(&self.state, &config, self.name_input.as_ref(), self.base_url_input.as_ref(), self.api_key_input.as_ref(), self.model_input.as_ref())),
                     ),
             )
     }
@@ -218,14 +298,28 @@ fn settings_navigation(active: SettingsSection) -> AnyElement {
         .into_any_element()
 }
 
-fn settings_content(state: &Arc<Mutex<SettingsWindowState>>, config: &AppConfig) -> AnyElement {
+fn settings_content(
+    state: &Arc<Mutex<SettingsWindowState>>,
+    config: &AppConfig,
+    name_input: Option<&Entity<TextInput>>,
+    base_url_input: Option<&Entity<TextInput>>,
+    api_key_input: Option<&Entity<TextInput>>,
+    model_input: Option<&Entity<TextInput>>,
+) -> AnyElement {
     match config.active_settings_section {
-        SettingsSection::AiProviders => ai_provider_pane(state, config),
+        SettingsSection::AiProviders => ai_provider_pane(state, config, name_input, base_url_input, api_key_input, model_input),
         section => settings_placeholder(section),
     }
 }
 
-fn ai_provider_pane(state: &Arc<Mutex<SettingsWindowState>>, config: &AppConfig) -> AnyElement {
+fn ai_provider_pane(
+    state: &Arc<Mutex<SettingsWindowState>>,
+    config: &AppConfig,
+    name_input: Option<&Entity<TextInput>>,
+    base_url_input: Option<&Entity<TextInput>>,
+    api_key_input: Option<&Entity<TextInput>>,
+    model_input: Option<&Entity<TextInput>>,
+) -> AnyElement {
     div()
         .size_full()
         .flex()
@@ -264,8 +358,8 @@ fn ai_provider_pane(state: &Arc<Mutex<SettingsWindowState>>, config: &AppConfig)
             div()
                 .flex()
                 .gap_5()
-                .child(provider_list(config))
-                .child(provider_editor(state, config)),
+                .child(provider_list(state, config))
+                .child(provider_editor(state, config, name_input, base_url_input, api_key_input, model_input)),
         )
         .child(
             div()
@@ -281,7 +375,7 @@ fn ai_provider_pane(state: &Arc<Mutex<SettingsWindowState>>, config: &AppConfig)
         .into_any_element()
 }
 
-fn provider_list(config: &AppConfig) -> AnyElement {
+fn provider_list(state: &Arc<Mutex<SettingsWindowState>>, config: &AppConfig) -> AnyElement {
     div()
         .w(px(360.))
         .rounded(px(10.))
@@ -300,6 +394,7 @@ fn provider_list(config: &AppConfig) -> AnyElement {
         )
         .children(config.providers.iter().map(|provider| {
             let selected = config.selected_provider_id.as_deref() == Some(provider.id.as_str());
+            let provider_id = provider.id.clone();
             div()
                 .px_4()
                 .py_3()
@@ -313,6 +408,16 @@ fn provider_list(config: &AppConfig) -> AnyElement {
                 .flex()
                 .flex_col()
                 .gap_2()
+                .id(SharedString::from(format!("provider-{}", provider_id)))
+                .cursor_pointer()
+                .on_click({
+                    let state = Arc::clone(state);
+                    let provider_id = provider_id.clone();
+                    move |_, _, _| {
+                        let mut guard = state.lock().unwrap();
+                        guard.config.selected_provider_id = Some(provider_id.clone());
+                    }
+                })
                 .child(
                     div()
                         .flex()
@@ -361,7 +466,14 @@ fn status_label(status: crate::config::ProviderConfigStatus) -> AnyElement {
         .into_any_element()
 }
 
-fn provider_editor(state: &Arc<Mutex<SettingsWindowState>>, config: &AppConfig) -> AnyElement {
+fn provider_editor(
+    state: &Arc<Mutex<SettingsWindowState>>,
+    config: &AppConfig,
+    name_input: Option<&Entity<TextInput>>,
+    base_url_input: Option<&Entity<TextInput>>,
+    api_key_input: Option<&Entity<TextInput>>,
+    model_input: Option<&Entity<TextInput>>,
+) -> AnyElement {
     let Some(provider) = config.selected_provider() else {
         return div()
             .flex_1()
@@ -385,11 +497,11 @@ fn provider_editor(state: &Arc<Mutex<SettingsWindowState>>, config: &AppConfig) 
         .flex_col()
         .gap_4()
         .child(components::section_title("提供商配置"))
-        .child(form_row("名称", provider.name.clone()))
+        .child(editable_form_row("名称", name_input))
         .child(protocol_segment(provider.protocol))
-        .child(form_row("Base URL", provider.base_url.clone()))
-        .child(form_row("API Key", provider.masked_api_key()))
-        .child(form_row("模型", provider.model.clone()))
+        .child(editable_form_row("Base URL", base_url_input))
+        .child(editable_form_row("API Key", api_key_input))
+        .child(editable_form_row("模型", model_input))
         .child(model_list(config, provider.id.as_str()))
         .child(
             div()
@@ -484,7 +596,7 @@ fn action_button(label: &'static str, active: bool, on_click: impl Fn() + 'stati
         .into_any_element()
 }
 
-fn form_row(label: &str, value: impl Into<String>) -> AnyElement {
+fn editable_form_row(label: &str, input: Option<&Entity<TextInput>>) -> AnyElement {
     div()
         .flex()
         .flex_col()
@@ -500,8 +612,11 @@ fn form_row(label: &str, value: impl Into<String>) -> AnyElement {
                 .px_3()
                 .flex()
                 .items_center()
-                .justify_between()
-                .child(value.into()),
+                .child(
+                    div()
+                        .flex_1()
+                        .children(input.cloned()),
+                ),
         )
         .into_any_element()
 }

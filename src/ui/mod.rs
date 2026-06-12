@@ -4,4 +4,5 @@ pub mod inspector;
 pub mod settings;
 pub mod shell;
 pub mod sidebar;
+pub mod text_input;
 pub mod theme;
