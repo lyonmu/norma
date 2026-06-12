@@ -1036,7 +1036,7 @@ Use this checklist when verifying `docs/superpowers/specs/2026-06-11-norma-ai-pr
 - [ ] The left navigation includes `通用`, `AI 提供商`, `运行环境`, `安全`, `Git`, and `外观`.
 - [ ] `AI 提供商` is selected with a soft blue tint.
 - [ ] The right pane title is `AI 提供商`.
-- [ ] The helper text says `为后续模型调用配置不同协议格式的提供商。`.
+- [ ] The helper text says `测试通过后才能保存配置。配置会写入本机 ~/.norma/config.toml。`.
 - [ ] Provider rows are grouped with separators rather than separate cards.
 - [ ] The selected provider row is lightly tinted.
 
@@ -1046,8 +1046,8 @@ Use this checklist when verifying `docs/superpowers/specs/2026-06-11-norma-ai-pr
 - [ ] `协议类型` has exactly `OpenAI` and `Anthropic`.
 - [ ] `API Key` is masked by default.
 - [ ] `保存配置` is the primary action.
-- [ ] `测试连接（预览）` is disabled or clearly preview-only.
-- [ ] The pane includes `模型调用将在后续通过 Rig + 自研 Provider 抽象层接入。当前仅保存配置预览。`.
+- [ ] `测试连接` invokes the configured provider test path and reports a tested state without exposing the API key.
+- [ ] The pane includes `测试通过后才能保存配置。配置会写入本机 ~/.norma/config.toml。`.
 - [ ] No real API key, account UI, avatar, billing, MCP, Skills, automation, or tool-calling controls are visible.
 ```
 
@@ -1084,7 +1084,7 @@ Expected:
 - the main workbench opens
 - clicking the top-right settings icon opens a separate `设置` window
 - the settings window shows the AI provider pane
-- no model calls or network provider tests are performed
+- no chat/session model calls are performed; provider testing uses the configured provider test path only
 
 - [ ] **Step 4: Commit**
 
@@ -1097,6 +1097,6 @@ git commit -m "test: add settings visual checklist"
 
 ## Self-Review Notes
 
-- Spec coverage: The plan covers the separate settings entry point, non-interruption behavior, left navigation, AI provider list, selected provider editor, OpenAI/Anthropic protocol limit, masked API keys, preview-only test action, and Rig plus custom Provider abstraction note.
+- Spec coverage: The plan covers the separate settings entry point, non-interruption behavior, left navigation, AI provider list, selected provider editor, OpenAI/Anthropic protocol limit, masked API keys, provider test action, and save-gated provider configuration note.
 - Placeholder scan: The plan contains no undefined implementation gaps; each code-changing task includes the exact code shape to add or modify.
 - Type consistency: `SettingsSection`, `ProviderProtocol`, `ProviderConfigStatus`, `AiProviderConfig`, and `AppConfig` are introduced in Task 1 and reused consistently in later tasks.
