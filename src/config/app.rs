@@ -321,6 +321,29 @@ impl AppConfig {
             .iter()
             .find(|provider| provider.id == selected_id)
     }
+
+    pub fn add_new_provider(&mut self) {
+        let new_id = format!("provider-{}", self.providers.len() + 1);
+        let new_provider = AiProviderConfig {
+            id: new_id.clone(),
+            name: "新提供商".to_string(),
+            protocol: ProviderProtocol::OpenAi,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key_reference: String::new(),
+            model: "gpt-4o".to_string(),
+            models: vec![ProviderModelRow {
+                id: "gpt-4o".to_string(),
+                name: "GPT-4o".to_string(),
+                model_id: "gpt-4o".to_string(),
+                is_default: true,
+            }],
+            status: ProviderConfigStatus::Incomplete,
+            is_default: false,
+            tested_candidate_fingerprint: None,
+        };
+        self.providers.push(new_provider);
+        self.selected_provider_id = Some(new_id);
+    }
 }
 
 pub fn mask_secret(secret: &str) -> String {

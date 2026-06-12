@@ -251,7 +251,14 @@ fn ai_provider_pane(state: &Arc<Mutex<SettingsWindowState>>, config: &AppConfig)
                             "测试通过后才能保存配置。配置会写入本机 ~/.norma/config.toml。",
                         )),
                 )
-                .child(components::pill("+ 新增提供商", true)),
+                .child(action_button("+ 新增提供商", true, {
+                    let state = Arc::clone(state);
+                    move || {
+                        let mut guard = state.lock().unwrap();
+                        guard.config.add_new_provider();
+                        tracing::info!(component = "settings", "new provider added");
+                    }
+                })),
         )
         .child(
             div()
