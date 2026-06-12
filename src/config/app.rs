@@ -1,3 +1,6 @@
+use crate::agent::provider::ProviderCandidateFingerprint;
+use crate::config::{NormaConfig, ProviderApiType};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsSection {
     General,
@@ -74,7 +77,18 @@ pub struct AiProviderConfig {
     pub base_url: String,
     pub api_key_reference: String,
     pub model: String,
+    pub models: Vec<ProviderModelRow>,
     pub status: ProviderConfigStatus,
+    pub is_default: bool,
+    pub tested_candidate_fingerprint: Option<ProviderCandidateFingerprint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderModelRow {
+    pub id: String,
+    pub name: String,
+    pub model_id: String,
+    pub is_default: bool,
 }
 
 impl AiProviderConfig {
@@ -102,6 +116,83 @@ impl AiProviderConfig {
     pub fn is_valid_for_preview(&self) -> bool {
         self.required_field_errors().is_empty()
     }
+
+    pub fn default_model(&self) -> Option<&ProviderModelRow> {
+        self.models.iter().find(|model| model.is_default)
+    }
+
+    pub fn candidate_fingerprint(&self) -> ProviderCandidateFingerprint {
+        let models: Vec<&str> = self
+            .models
+            .iter()
+            .map(|model| model.model_id.as_str())
+            .collect();
+        let default_model = self
+            .default_model()
+            .map(|model| model.model_id.as_str())
+            .unwrap_or_else(|| self.model.as_str());
+
+        ProviderCandidateFingerprint::from_parts(
+            &self.id,
+            self.api_type(),
+            &self.base_url,
+            &self.api_key_reference,
+            &models,
+            default_model,
+        )
+    }
+
+    pub fn mark_tested(&mut self) {
+        self.tested_candidate_fingerprint = Some(self.candidate_fingerprint());
+    }
+
+    pub fn can_save(&self) -> bool {
+        self.tested_candidate_fingerprint
+            .as_ref()
+            .is_some_and(|fingerprint| fingerprint == &self.candidate_fingerprint())
+    }
+
+    fn api_type(&self) -> ProviderApiType {
+        match self.protocol {
+            ProviderProtocol::OpenAi => ProviderApiType::OpenAi,
+            ProviderProtocol::Anthropic => ProviderApiType::Anthropic,
+        }
+    }
+
+    fn from_norma_provider(provider: &crate::config::AiProviderConfig) -> Self {
+        let protocol = match provider.api_type {
+            ProviderApiType::OpenAi => ProviderProtocol::OpenAi,
+            ProviderApiType::Anthropic => ProviderProtocol::Anthropic,
+        };
+        let models = provider
+            .models
+            .iter()
+            .map(|model| ProviderModelRow {
+                id: model.id.clone(),
+                name: model.name.clone(),
+                model_id: model.model_id.clone(),
+                is_default: model.is_default,
+            })
+            .collect::<Vec<_>>();
+        let default_model = models
+            .iter()
+            .find(|model| model.is_default)
+            .map(|model| model.model_id.clone())
+            .unwrap_or_default();
+
+        Self {
+            id: provider.id.clone(),
+            name: provider.name.clone(),
+            protocol,
+            base_url: provider.base_url.clone(),
+            api_key_reference: provider.api_key.clone(),
+            model: default_model,
+            models,
+            status: ProviderConfigStatus::PreviewUnvalidated,
+            is_default: provider.is_default,
+            tested_candidate_fingerprint: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,6 +203,14 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    pub fn empty() -> Self {
+        Self {
+            active_settings_section: SettingsSection::AiProviders,
+            selected_provider_id: None,
+            providers: Vec::new(),
+        }
+    }
+
     pub fn sample() -> Self {
         Self {
             active_settings_section: SettingsSection::AiProviders,
@@ -124,7 +223,15 @@ impl AppConfig {
                     base_url: "https://api.openai.com/v1".to_string(),
                     api_key_reference: "sk-preview-openai-default".to_string(),
                     model: "gpt-4o".to_string(),
+                    models: vec![ProviderModelRow {
+                        id: "gpt-4o".to_string(),
+                        name: "GPT-4o".to_string(),
+                        model_id: "gpt-4o".to_string(),
+                        is_default: true,
+                    }],
                     status: ProviderConfigStatus::Complete,
+                    is_default: true,
+                    tested_candidate_fingerprint: None,
                 },
                 AiProviderConfig {
                     id: "claude-proxy".to_string(),
@@ -133,10 +240,45 @@ impl AppConfig {
                     base_url: "https://api.anthropic.com".to_string(),
                     api_key_reference: "sk-preview-claude-proxy".to_string(),
                     model: "claude-3-5-sonnet".to_string(),
+                    models: vec![ProviderModelRow {
+                        id: "claude-3-5-sonnet".to_string(),
+                        name: "Claude 3.5 Sonnet".to_string(),
+                        model_id: "claude-3-5-sonnet".to_string(),
+                        is_default: true,
+                    }],
                     status: ProviderConfigStatus::PreviewUnvalidated,
+                    is_default: false,
+                    tested_candidate_fingerprint: None,
                 },
             ],
         }
+    }
+
+    pub fn from_norma_config(config: &NormaConfig) -> Self {
+        let providers = config
+            .ai
+            .providers
+            .iter()
+            .map(AiProviderConfig::from_norma_provider)
+            .collect::<Vec<_>>();
+        let selected_provider_id = providers
+            .iter()
+            .find(|provider| provider.is_default)
+            .or_else(|| providers.first())
+            .map(|provider| provider.id.clone());
+
+        Self {
+            active_settings_section: SettingsSection::AiProviders,
+            selected_provider_id,
+            providers,
+        }
+    }
+
+    pub fn selected_provider_mut(&mut self) -> Option<&mut AiProviderConfig> {
+        let selected_id = self.selected_provider_id.as_deref()?;
+        self.providers
+            .iter_mut()
+            .find(|provider| provider.id == selected_id)
     }
 
     pub fn selected_provider(&self) -> Option<&AiProviderConfig> {
@@ -170,6 +312,52 @@ pub fn mask_secret(secret: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{AiModelConfig, NormaConfig, ProviderApiType};
+
+    fn sample_persisted_config() -> NormaConfig {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::NormaPaths::from_home(root.path());
+        let mut config = NormaConfig::default_for(&paths);
+        config.ai.providers = vec![
+            crate::config::AiProviderConfig {
+                id: "openai-default".to_string(),
+                name: "OpenAI 默认".to_string(),
+                api_type: ProviderApiType::OpenAi,
+                base_url: "https://api.openai.com/v1".to_string(),
+                api_key: "sk-test-openai-default".to_string(),
+                is_default: true,
+                models: vec![
+                    AiModelConfig {
+                        id: "gpt-4o-mini".to_string(),
+                        name: "GPT-4o mini".to_string(),
+                        model_id: "gpt-4o-mini".to_string(),
+                        is_default: true,
+                    },
+                    AiModelConfig {
+                        id: "gpt-4.1".to_string(),
+                        name: "GPT-4.1".to_string(),
+                        model_id: "gpt-4.1".to_string(),
+                        is_default: false,
+                    },
+                ],
+            },
+            crate::config::AiProviderConfig {
+                id: "claude-proxy".to_string(),
+                name: "Claude 代理".to_string(),
+                api_type: ProviderApiType::Anthropic,
+                base_url: "https://api.anthropic.com".to_string(),
+                api_key: "sk-test-claude-proxy".to_string(),
+                is_default: false,
+                models: vec![AiModelConfig {
+                    id: "claude-3-5-sonnet".to_string(),
+                    name: "Claude 3.5 Sonnet".to_string(),
+                    model_id: "claude-3-5-sonnet".to_string(),
+                    is_default: true,
+                }],
+            },
+        ];
+        config
+    }
 
     #[test]
     fn settings_sections_match_design_order() {
@@ -212,7 +400,10 @@ mod tests {
             base_url: "".to_string(),
             api_key_reference: "".to_string(),
             model: "".to_string(),
+            models: Vec::new(),
             status: ProviderConfigStatus::Incomplete,
+            is_default: false,
+            tested_candidate_fingerprint: None,
         };
 
         assert_eq!(
@@ -233,5 +424,30 @@ mod tests {
         let selected = config.selected_provider().unwrap();
         assert_eq!(selected.name, "OpenAI 默认");
         assert_eq!(selected.protocol, ProviderProtocol::OpenAi);
+    }
+
+    #[test]
+    fn derives_provider_rows_from_persisted_config() {
+        let view_model = AppConfig::from_norma_config(&sample_persisted_config());
+
+        assert_eq!(view_model.providers.len(), 2);
+
+        let selected = view_model.selected_provider().unwrap();
+        assert_eq!(selected.id, "openai-default");
+        assert!(selected.is_default);
+        assert_eq!(selected.models.len(), 2);
+        assert!(selected.models.iter().any(|model| model.is_default));
+    }
+
+    #[test]
+    fn save_is_unavailable_when_test_state_is_stale() {
+        let mut view_model = AppConfig::from_norma_config(&sample_persisted_config());
+        let provider = view_model.selected_provider_mut().unwrap();
+
+        provider.mark_tested();
+        assert!(provider.can_save());
+
+        provider.base_url = "https://proxy.example.com/v1".to_string();
+        assert!(!provider.can_save());
     }
 }

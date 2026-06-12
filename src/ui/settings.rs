@@ -1,4 +1,7 @@
-use gpui::{AnyElement, Context, IntoElement, ParentElement, Render, Styled, Window, div, px};
+use gpui::{
+    AnyElement, Context, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, Window, div, px,
+};
 
 use crate::config::{AppConfig, SettingsSection};
 use crate::ui::{components, theme};
@@ -120,7 +123,7 @@ fn ai_provider_pane(config: &AppConfig) -> AnyElement {
                                 .child("AI 提供商"),
                         )
                         .child(components::label(
-                            "为后续模型调用配置不同协议格式的提供商。",
+                            "测试通过后才能保存配置。配置会写入本机 ~/.norma/config.toml。",
                         )),
                 )
                 .child(components::pill("+ 新增提供商", true)),
@@ -184,8 +187,19 @@ fn provider_list(config: &AppConfig) -> AnyElement {
                         .justify_between()
                         .child(
                             div()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .child(provider.name.clone()),
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .child(provider.name.clone()),
+                                )
+                                .child(if provider.is_default {
+                                    components::pill("默认", true)
+                                } else {
+                                    components::pill("候选", false)
+                                }),
                         )
                         .child(components::pill(provider.protocol.label(), false)),
                 )
@@ -196,6 +210,7 @@ fn provider_list(config: &AppConfig) -> AnyElement {
                         .child(components::label(provider.model.clone()))
                         .child(status_label(provider.status)),
                 )
+                .child(model_list(config, provider.id.as_str()))
         }))
         .into_any_element()
 }
@@ -243,6 +258,7 @@ fn provider_editor(config: &AppConfig) -> AnyElement {
         .child(form_row("Base URL", provider.base_url.clone()))
         .child(form_row("API Key", provider.masked_api_key()))
         .child(form_row("模型", provider.model.clone()))
+        .child(model_list(config, provider.id.as_str()))
         .child(
             div()
                 .mt_2()
@@ -253,11 +269,71 @@ fn provider_editor(config: &AppConfig) -> AnyElement {
                     div()
                         .flex()
                         .gap_2()
-                        .child(components::pill("保存配置", true))
-                        .child(components::pill("测试连接（预览）", false)),
+                        .child(action_button("测试连接", true, {
+                            let provider_id = provider.id.clone();
+                            move || {
+                                tracing::info!(component = "settings", provider_id = %provider_id, "provider test requested");
+                            }
+                        }))
+                        .child(action_button("保存配置", provider.can_save(), {
+                            let provider_id = provider.id.clone();
+                            let can_save = provider.can_save();
+                            move || {
+                                if can_save {
+                                    tracing::info!(component = "settings", provider_id = %provider_id, "provider save requested");
+                                } else {
+                                    tracing::warn!(component = "settings", provider_id = %provider_id, "save blocked until provider test matches current candidate");
+                                }
+                            }
+                        })),
                 )
                 .child(components::label("预览按钮不会发起网络请求")),
         )
+        .into_any_element()
+}
+
+fn model_list(config: &AppConfig, provider_id: &str) -> AnyElement {
+    let Some(provider) = config
+        .providers
+        .iter()
+        .find(|candidate| candidate.id == provider_id)
+    else {
+        return div().into_any_element();
+    };
+
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(components::label("模型列表"))
+        .children(provider.models.iter().map(|model| {
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_2()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(model.name.clone())
+                        .child(components::label(model.model_id.clone())),
+                )
+                .child(if model.is_default {
+                    components::pill("默认模型", true)
+                } else {
+                    components::pill("候选", false)
+                })
+        }))
+        .into_any_element()
+}
+
+fn action_button(label: &'static str, active: bool, on_click: impl Fn() + 'static) -> AnyElement {
+    div()
+        .id(SharedString::from(format!("settings-{label}")))
+        .child(components::pill(label, active))
+        .on_click(move |_, _, _| on_click())
         .into_any_element()
 }
 

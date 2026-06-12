@@ -54,7 +54,7 @@ impl NormaAppState {
             files: Vec::new(),
             git: GitStatusSummary::unavailable("no project open"),
             session: SessionState::new(sample_thread()),
-            config: AppConfig::sample(),
+            config: AppConfig::empty(),
             runtime_paths: None,
             runtime_config: None,
             runtime_skills: SkillIndex::default(),
@@ -80,7 +80,7 @@ impl NormaAppState {
                     files: sample_file_tree(),
                     git: GitStatusSummary::unavailable("project could not be opened"),
                     session: SessionState::new(sample_thread()),
-                    config: AppConfig::sample(),
+                    config: AppConfig::empty(),
                     runtime_paths: None,
                     runtime_config: None,
                     runtime_skills: SkillIndex::default(),
@@ -110,7 +110,7 @@ impl NormaAppState {
             files,
             git,
             session,
-            config: AppConfig::sample(),
+            config: AppConfig::empty(),
             runtime_paths: None,
             runtime_config: None,
             runtime_skills: SkillIndex::default(),
@@ -124,6 +124,7 @@ impl NormaAppState {
     ) -> Self {
         let mut state = Self::load_current_project();
         state.runtime_paths = Some(paths);
+        state.config = AppConfig::from_norma_config(&config);
         state.runtime_config = Some(config);
         state.runtime_skills = skills;
         state
@@ -175,17 +176,48 @@ mod tests {
     #[test]
     fn app_state_includes_preview_provider_config() {
         let state = NormaAppState::no_project();
-        assert_eq!(state.config.providers.len(), 2);
-        assert_eq!(
-            state.config.selected_provider().unwrap().name,
-            "OpenAI 默认"
-        );
+        assert!(state.config.providers.is_empty());
+        assert!(state.config.selected_provider().is_none());
     }
 
     #[test]
     fn settings_config_is_separate_from_session_events() {
         let state = NormaAppState::no_project();
         assert!(state.session.events.is_empty());
-        assert!(!state.config.providers.is_empty());
+        assert!(state.config.providers.is_empty());
+    }
+
+    #[test]
+    fn runtime_config_populates_settings_provider_rows_from_persisted_config() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::NormaPaths::from_home(root.path());
+        let mut runtime_config = crate::config::NormaConfig::default_for(&paths);
+        runtime_config.ai.providers = vec![crate::config::AiProviderConfig {
+            id: "openai-default".to_string(),
+            name: "OpenAI 默认".to_string(),
+            api_type: crate::config::ProviderApiType::OpenAi,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: "sk-test-openai-default".to_string(),
+            is_default: true,
+            models: vec![crate::config::AiModelConfig {
+                id: "gpt-4o-mini".to_string(),
+                name: "GPT-4o mini".to_string(),
+                model_id: "gpt-4o-mini".to_string(),
+                is_default: true,
+            }],
+        }];
+
+        let state = NormaAppState::load_current_project_with_runtime(
+            paths,
+            runtime_config,
+            SkillIndex::default(),
+        );
+
+        assert_eq!(state.config.providers.len(), 1);
+        assert_eq!(
+            state.config.selected_provider().unwrap().id,
+            "openai-default"
+        );
+        assert!(state.config.selected_provider().unwrap().is_default);
     }
 }
