@@ -92,6 +92,21 @@ pub struct LoggingConfig {
 }
 
 impl NormaConfig {
+    fn missing_provider_field_error(field: &str) -> ConfigError {
+        ConfigError::Invalid(format!("ai.providers[].{} must not be empty", field))
+    }
+
+    fn default_provider_error() -> ConfigError {
+        ConfigError::Invalid("ai.providers must contain exactly one default provider".to_string())
+    }
+
+    fn default_model_error(provider_id: &str) -> ConfigError {
+        ConfigError::Invalid(format!(
+            "ai.providers[{}].models must contain exactly one default model",
+            provider_id
+        ))
+    }
+
     pub fn default_for(paths: &crate::paths::NormaPaths) -> Self {
         Self {
             window: WindowConfig {
@@ -160,9 +175,7 @@ impl NormaConfig {
             .filter(|provider| provider.is_default)
             .count();
         if !self.ai.providers.is_empty() && default_providers != 1 {
-            return Err(ConfigError::Invalid(
-                "ai.providers must contain exactly one default provider".to_string(),
-            ));
+            return Err(Self::default_provider_error());
         }
 
         for provider in &self.ai.providers {
@@ -177,28 +190,26 @@ impl NormaConfig {
                 ));
             }
             if provider.base_url.trim().is_empty() {
-                return Err(ConfigError::Invalid(
-                    "ai.providers[].base_url must not be empty".to_string(),
-                ));
+                return Err(Self::missing_provider_field_error("base_url"));
             }
             if provider.api_key.trim().is_empty() {
-                return Err(ConfigError::Invalid(
-                    "ai.providers[].api_key must not be empty".to_string(),
-                ));
+                return Err(Self::missing_provider_field_error("credentials"));
             }
 
-            if !provider.models.is_empty() {
-                let default_models = provider
-                    .models
-                    .iter()
-                    .filter(|model| model.is_default)
-                    .count();
-                if default_models != 1 {
-                    return Err(ConfigError::Invalid(format!(
-                        "ai.providers[{}].models must contain exactly one default model",
-                        provider.id
-                    )));
-                }
+            if provider.models.is_empty() {
+                return Err(ConfigError::Invalid(format!(
+                    "ai.providers[{}].models must not be empty",
+                    provider.id
+                )));
+            }
+
+            let default_models = provider
+                .models
+                .iter()
+                .filter(|model| model.is_default)
+                .count();
+            if default_models != 1 {
+                return Err(Self::default_model_error(&provider.id));
             }
 
             for model in &provider.models {
@@ -234,19 +245,20 @@ impl NormaConfig {
             .iter()
             .find(|provider| provider.is_default)
             .ok_or_else(|| {
-                ConfigError::Invalid(
-                    "ai.providers must contain exactly one default provider".to_string(),
-                )
+                Self::default_provider_error()
             })?;
+        if provider.models.is_empty() {
+            return Err(ConfigError::Invalid(format!(
+                "ai.providers[{}].models must not be empty",
+                provider.id
+            )));
+        }
         let model = provider
             .models
             .iter()
             .find(|model| model.is_default)
             .ok_or_else(|| {
-                ConfigError::Invalid(format!(
-                    "ai.providers[{}].models must contain exactly one default model",
-                    provider.id
-                ))
+                Self::default_model_error(&provider.id)
             })?;
 
         Ok((provider, model))
@@ -258,6 +270,20 @@ mod tests {
     use super::*;
 
     fn test_provider(id: &str, api_type: ProviderApiType, is_default: bool) -> AiProviderConfig {
+        test_provider_with_models(id, api_type, is_default, vec![AiModelConfig {
+            id: format!("{id}-model"),
+            name: format!("{id} model"),
+            model_id: format!("{id}-model-id"),
+            is_default: true,
+        }])
+    }
+
+    fn test_provider_with_models(
+        id: &str,
+        api_type: ProviderApiType,
+        is_default: bool,
+        models: Vec<AiModelConfig>,
+    ) -> AiProviderConfig {
         AiProviderConfig {
             id: id.to_string(),
             name: format!("{id} provider"),
@@ -265,12 +291,7 @@ mod tests {
             base_url: "https://example.com/v1".to_string(),
             api_key: "sk-test-redacted".to_string(),
             is_default,
-            models: vec![AiModelConfig {
-                id: format!("{id}-model"),
-                name: format!("{id} model"),
-                model_id: format!("{id}-model-id"),
-                is_default: true,
-            }],
+            models,
         }
     }
 
@@ -323,5 +344,39 @@ mod tests {
         let config = NormaConfig::default_for(&paths);
 
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn rejects_empty_model_list() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::NormaPaths::from_home(root.path());
+        let mut config = NormaConfig::default_for(&paths);
+        config.ai.providers = vec![test_provider_with_models(
+            "openai",
+            ProviderApiType::OpenAi,
+            true,
+            vec![],
+        )];
+
+        let error = config.validate().unwrap_err().to_string();
+
+        assert!(error.contains("models must not be empty"));
+    }
+
+    #[test]
+    fn default_provider_and_model_rejects_empty_model_list() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::NormaPaths::from_home(root.path());
+        let mut config = NormaConfig::default_for(&paths);
+        config.ai.providers = vec![test_provider_with_models(
+            "openai",
+            ProviderApiType::OpenAi,
+            true,
+            vec![],
+        )];
+
+        let error = config.default_provider_and_model().unwrap_err().to_string();
+
+        assert!(error.contains("models must not be empty"));
     }
 }
