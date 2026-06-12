@@ -14,4 +14,4 @@ pub use openai::OpenAiProviderClient;
 pub use registry::ProviderRegistry;
 pub use request::{ProviderError, ProviderRequest, ProviderResponse, ProviderTestResult};
 pub use rig_adapter::ProviderClient;
-pub use service::{ProviderCandidateFingerprint, ProviderService};
+pub use service::{ProviderCandidate, ProviderCandidateFingerprint, ProviderService};

@@ -240,4 +240,17 @@ mod tests {
         assert_eq!(candidate.provider.id, "openai-default");
         assert_eq!(candidate.model.model_id, "gpt-4o-mini");
     }
+
+    #[test]
+    fn provider_candidate_is_exported_from_provider_module() {
+        let provider = provider_config();
+        let model = model_config();
+        let candidate = crate::agent::provider::ProviderCandidate {
+            provider: &provider,
+            model: &model,
+        };
+
+        assert_eq!(candidate.provider.id, "openai-default");
+        assert_eq!(candidate.model.model_id, "gpt-4o-mini");
+    }
 }
