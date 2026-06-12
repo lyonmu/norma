@@ -1,6 +1,6 @@
 use std::env;
 
-use crate::agent::{AgentRuntime, MockAgentRuntime};
+use crate::agent::{AgentRuntime, MockAgentRuntime, RealAgentRuntime};
 use crate::config::{AppConfig, NormaConfig};
 use crate::git::{GitStatusSummary, read_status};
 use crate::paths::NormaPaths;
@@ -29,6 +29,7 @@ pub struct NormaAppState {
     pub runtime_paths: Option<NormaPaths>,
     pub runtime_config: Option<NormaConfig>,
     pub runtime_skills: SkillIndex,
+    pub runtime_error: Option<String>,
 }
 
 impl NormaAppState {
@@ -58,6 +59,7 @@ impl NormaAppState {
             runtime_paths: None,
             runtime_config: None,
             runtime_skills: SkillIndex::default(),
+            runtime_error: None,
         }
     }
 
@@ -84,6 +86,7 @@ impl NormaAppState {
                     runtime_paths: None,
                     runtime_config: None,
                     runtime_skills: SkillIndex::default(),
+                    runtime_error: None,
                 };
             }
         };
@@ -114,6 +117,7 @@ impl NormaAppState {
             runtime_paths: None,
             runtime_config: None,
             runtime_skills: SkillIndex::default(),
+            runtime_error: None,
         }
     }
 
@@ -125,7 +129,22 @@ impl NormaAppState {
         let mut state = Self::load_current_project();
         state.runtime_paths = Some(paths);
         state.config = AppConfig::from_norma_config(&config);
-        state.runtime_config = Some(config);
+        match RealAgentRuntime::new(config.clone()) {
+            Ok(runtime) => {
+                state.runtime_config = Some(config);
+                state.runtime_error = None;
+                let mut session = SessionState::new(sample_thread());
+                for event in runtime.run_mock_task("完善 Norma 项目设计") {
+                    session.push_event(event);
+                }
+                state.session = session;
+            }
+            Err(error) => {
+                tracing::warn!(component = "app", error = %error, "real agent runtime unavailable");
+                state.runtime_config = Some(config);
+                state.runtime_error = Some(error.to_string());
+            }
+        }
         state.runtime_skills = skills;
         state
     }
@@ -258,5 +277,38 @@ mod tests {
             state.config.selected_provider().unwrap().name,
             "OpenAI 主提供商"
         );
+    }
+
+    #[test]
+    fn runtime_config_with_valid_default_provider_uses_real_runtime_events() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::NormaPaths::from_home(root.path());
+        let mut runtime_config = crate::config::NormaConfig::default_for(&paths);
+        runtime_config.ai.providers = vec![crate::config::AiProviderConfig {
+            id: "openai-default".to_string(),
+            name: "OpenAI 默认".to_string(),
+            api_type: crate::config::ProviderApiType::OpenAi,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: "sk-test-openai-default".to_string(),
+            is_default: true,
+            models: vec![crate::config::AiModelConfig {
+                id: "gpt-4o-mini".to_string(),
+                name: "GPT-4o mini".to_string(),
+                model_id: "gpt-4o-mini".to_string(),
+                is_default: true,
+            }],
+        }];
+
+        let state = NormaAppState::load_current_project_with_runtime(
+            paths,
+            runtime_config,
+            SkillIndex::default(),
+        );
+
+        assert!(state.runtime_error.is_none());
+        assert!(matches!(
+            state.session.events.last(),
+            Some(crate::session::SessionEvent::Error { .. })
+        ));
     }
 }
