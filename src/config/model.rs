@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fmt, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -41,7 +41,7 @@ pub struct AiConfig {
     pub providers: Vec<AiProviderConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AiProviderConfig {
     pub id: String,
     pub name: String,
@@ -51,6 +51,20 @@ pub struct AiProviderConfig {
     pub is_default: bool,
     #[serde(default)]
     pub models: Vec<AiModelConfig>,
+}
+
+impl fmt::Debug for AiProviderConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiProviderConfig")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("api_type", &self.api_type)
+            .field("base_url", &self.base_url)
+            .field("credentials", &"[redacted]")
+            .field("is_default", &self.is_default)
+            .field("models", &self.models)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -244,9 +258,7 @@ impl NormaConfig {
             .providers
             .iter()
             .find(|provider| provider.is_default)
-            .ok_or_else(|| {
-                Self::default_provider_error()
-            })?;
+            .ok_or_else(Self::default_provider_error)?;
         if provider.models.is_empty() {
             return Err(ConfigError::Invalid(format!(
                 "ai.providers[{}].models must not be empty",
@@ -257,9 +269,7 @@ impl NormaConfig {
             .models
             .iter()
             .find(|model| model.is_default)
-            .ok_or_else(|| {
-                Self::default_model_error(&provider.id)
-            })?;
+            .ok_or_else(|| Self::default_model_error(&provider.id))?;
 
         Ok((provider, model))
     }
@@ -270,12 +280,17 @@ mod tests {
     use super::*;
 
     fn test_provider(id: &str, api_type: ProviderApiType, is_default: bool) -> AiProviderConfig {
-        test_provider_with_models(id, api_type, is_default, vec![AiModelConfig {
-            id: format!("{id}-model"),
-            name: format!("{id} model"),
-            model_id: format!("{id}-model-id"),
-            is_default: true,
-        }])
+        test_provider_with_models(
+            id,
+            api_type,
+            is_default,
+            vec![AiModelConfig {
+                id: format!("{id}-model"),
+                name: format!("{id} model"),
+                model_id: format!("{id}-model-id"),
+                is_default: true,
+            }],
+        )
     }
 
     fn test_provider_with_models(
@@ -378,5 +393,16 @@ mod tests {
         let error = config.default_provider_and_model().unwrap_err().to_string();
 
         assert!(error.contains("models must not be empty"));
+    }
+
+    #[test]
+    fn provider_config_debug_redacts_api_key() {
+        let provider = test_provider("openai-default", ProviderApiType::OpenAi, true);
+
+        let rendered = format!("{provider:?}");
+
+        assert!(!rendered.contains("api_key"));
+        assert!(!rendered.contains("sk-test-redacted"));
+        assert!(rendered.contains("[redacted]"));
     }
 }

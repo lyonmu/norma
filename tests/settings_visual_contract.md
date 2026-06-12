@@ -28,6 +28,6 @@ Use this checklist when verifying `docs/superpowers/specs/2026-06-11-norma-ai-pr
 - [ ] `协议类型` has exactly `OpenAI` and `Anthropic`.
 - [ ] `API Key` is masked by default.
 - [ ] `保存配置` is the primary action.
-- [ ] `测试连接（预览）` is disabled or clearly preview-only.
-- [ ] The pane includes `模型调用将在后续通过 Rig + 自研 Provider 抽象层接入。当前仅保存配置预览。`.
+- [ ] `测试连接` invokes the configured provider test path and reports a tested state without exposing the API key.
+- [ ] The pane includes `测试通过后才能保存配置。配置会写入本机 ~/.norma/config.toml。`.
 - [ ] No real API key, account UI, avatar, billing, MCP, Skills, automation, or tool-calling controls are visible.

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::agent::provider::ProviderCandidateFingerprint;
+use crate::agent::provider::{ProviderCandidateFingerprint, ProviderCandidateFingerprintParts};
 use crate::config::{NormaConfig, ProviderApiType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,17 +161,17 @@ impl AiProviderConfig {
             .map(|model| model.model_id.as_str())
             .unwrap_or_else(|| self.model.as_str());
 
-        ProviderCandidateFingerprint::from_parts(
-            &self.id,
-            &self.name,
-            self.api_type(),
-            &self.base_url,
-            &self.api_key_reference,
-            self.is_default,
-            &self.model,
-            &models,
+        ProviderCandidateFingerprint::from_parts(ProviderCandidateFingerprintParts {
+            provider_id: &self.id,
+            provider_name: &self.name,
+            api_type: self.api_type(),
+            base_url: &self.base_url,
+            api_key: &self.api_key_reference,
+            is_default: self.is_default,
+            selected_model: &self.model,
+            models: &models,
             default_model,
-        )
+        })
     }
 
     pub fn mark_tested(&mut self) {

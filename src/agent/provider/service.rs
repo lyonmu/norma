@@ -18,32 +18,34 @@ impl fmt::Debug for ProviderCandidateFingerprint {
 }
 
 impl ProviderCandidateFingerprint {
-    pub fn from_parts(
-        provider_id: &str,
-        provider_name: &str,
-        api_type: ProviderApiType,
-        base_url: &str,
-        api_key: &str,
-        is_default: bool,
-        selected_model: &str,
-        models: &[(&str, &str, &str, bool)],
-        default_model: &str,
-    ) -> Self {
+    pub fn from_parts(parts: ProviderCandidateFingerprintParts<'_>) -> Self {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        provider_id.hash(&mut hasher);
-        provider_name.hash(&mut hasher);
-        format!("{:?}", api_type).hash(&mut hasher);
-        base_url.hash(&mut hasher);
-        api_key.hash(&mut hasher);
-        is_default.hash(&mut hasher);
-        selected_model.hash(&mut hasher);
-        models.hash(&mut hasher);
-        default_model.hash(&mut hasher);
+        parts.provider_id.hash(&mut hasher);
+        parts.provider_name.hash(&mut hasher);
+        format!("{:?}", parts.api_type).hash(&mut hasher);
+        parts.base_url.hash(&mut hasher);
+        parts.api_key.hash(&mut hasher);
+        parts.is_default.hash(&mut hasher);
+        parts.selected_model.hash(&mut hasher);
+        parts.models.hash(&mut hasher);
+        parts.default_model.hash(&mut hasher);
 
         Self {
             hash: hasher.finish(),
         }
     }
+}
+
+pub struct ProviderCandidateFingerprintParts<'a> {
+    pub provider_id: &'a str,
+    pub provider_name: &'a str,
+    pub api_type: ProviderApiType,
+    pub base_url: &'a str,
+    pub api_key: &'a str,
+    pub is_default: bool,
+    pub selected_model: &'a str,
+    pub models: &'a [(&'a str, &'a str, &'a str, bool)],
+    pub default_model: &'a str,
 }
 
 pub struct ProviderCandidate<'a> {
@@ -104,7 +106,10 @@ impl ProviderService {
 
 #[cfg(test)]
 mod tests {
-    use super::{ProviderCandidate, ProviderCandidateFingerprint, ProviderService};
+    use super::{
+        ProviderCandidate, ProviderCandidateFingerprint, ProviderCandidateFingerprintParts,
+        ProviderService,
+    };
     use crate::agent::provider::{
         ProviderClient, ProviderError, ProviderRequest, ProviderResponse, ProviderTestResult,
     };
@@ -168,45 +173,47 @@ mod tests {
 
     #[test]
     fn changed_candidate_invalidates_successful_test() {
-        let original = ProviderCandidateFingerprint::from_parts(
-            "openai-default",
-            "OpenAI",
-            crate::config::ProviderApiType::OpenAi,
-            "https://api.openai.com/v1",
-            "sk-one",
-            true,
-            "gpt-4o-mini",
-            &[("gpt-4o-mini", "GPT-4o mini", "gpt-4o-mini", true)],
-            "gpt-4o-mini",
-        );
-        let changed = ProviderCandidateFingerprint::from_parts(
-            "openai-default",
-            "OpenAI",
-            crate::config::ProviderApiType::OpenAi,
-            "https://api.openai.com/v1",
-            "sk-two",
-            true,
-            "gpt-4o-mini",
-            &[("gpt-4o-mini", "GPT-4o mini", "gpt-4o-mini", true)],
-            "gpt-4o-mini",
-        );
+        let original =
+            ProviderCandidateFingerprint::from_parts(ProviderCandidateFingerprintParts {
+                provider_id: "openai-default",
+                provider_name: "OpenAI",
+                api_type: crate::config::ProviderApiType::OpenAi,
+                base_url: "https://api.openai.com/v1",
+                api_key: "sk-one",
+                is_default: true,
+                selected_model: "gpt-4o-mini",
+                models: &[("gpt-4o-mini", "GPT-4o mini", "gpt-4o-mini", true)],
+                default_model: "gpt-4o-mini",
+            });
+        let changed = ProviderCandidateFingerprint::from_parts(ProviderCandidateFingerprintParts {
+            provider_id: "openai-default",
+            provider_name: "OpenAI",
+            api_type: crate::config::ProviderApiType::OpenAi,
+            base_url: "https://api.openai.com/v1",
+            api_key: "sk-two",
+            is_default: true,
+            selected_model: "gpt-4o-mini",
+            models: &[("gpt-4o-mini", "GPT-4o mini", "gpt-4o-mini", true)],
+            default_model: "gpt-4o-mini",
+        });
 
         assert_ne!(original, changed);
     }
 
     #[test]
     fn fingerprint_debug_redacts_api_key() {
-        let fingerprint = ProviderCandidateFingerprint::from_parts(
-            "openai-default",
-            "OpenAI",
-            crate::config::ProviderApiType::OpenAi,
-            "https://api.openai.com/v1",
-            "sk-secret-value",
-            true,
-            "gpt-4o-mini",
-            &[("gpt-4o-mini", "GPT-4o mini", "gpt-4o-mini", true)],
-            "gpt-4o-mini",
-        );
+        let fingerprint =
+            ProviderCandidateFingerprint::from_parts(ProviderCandidateFingerprintParts {
+                provider_id: "openai-default",
+                provider_name: "OpenAI",
+                api_type: crate::config::ProviderApiType::OpenAi,
+                base_url: "https://api.openai.com/v1",
+                api_key: "sk-secret-value",
+                is_default: true,
+                selected_model: "gpt-4o-mini",
+                models: &[("gpt-4o-mini", "GPT-4o mini", "gpt-4o-mini", true)],
+                default_model: "gpt-4o-mini",
+            });
 
         let rendered = format!("{:?}", fingerprint);
 
