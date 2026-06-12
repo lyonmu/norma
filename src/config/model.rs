@@ -159,7 +159,7 @@ impl NormaConfig {
             .iter()
             .filter(|provider| provider.is_default)
             .count();
-        if default_providers != 1 {
+        if !self.ai.providers.is_empty() && default_providers != 1 {
             return Err(ConfigError::Invalid(
                 "ai.providers must contain exactly one default provider".to_string(),
             ));
@@ -187,16 +187,18 @@ impl NormaConfig {
                 ));
             }
 
-            let default_models = provider
-                .models
-                .iter()
-                .filter(|model| model.is_default)
-                .count();
-            if default_models != 1 {
-                return Err(ConfigError::Invalid(format!(
-                    "ai.providers[{}].models must contain exactly one default model",
-                    provider.id
-                )));
+            if !provider.models.is_empty() {
+                let default_models = provider
+                    .models
+                    .iter()
+                    .filter(|model| model.is_default)
+                    .count();
+                if default_models != 1 {
+                    return Err(ConfigError::Invalid(format!(
+                        "ai.providers[{}].models must contain exactly one default model",
+                        provider.id
+                    )));
+                }
             }
 
             for model in &provider.models {
@@ -226,8 +228,6 @@ impl NormaConfig {
     pub fn default_provider_and_model(
         &self,
     ) -> Result<(&AiProviderConfig, &AiModelConfig), ConfigError> {
-        self.validate()?;
-
         let provider = self
             .ai
             .providers
@@ -314,5 +314,14 @@ mod tests {
 
         assert!(error.contains("exactly one default provider"));
         assert!(!error.contains("sk-test"));
+    }
+
+    #[test]
+    fn empty_provider_list_remains_valid() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::NormaPaths::from_home(root.path());
+        let config = NormaConfig::default_for(&paths);
+
+        config.validate().unwrap();
     }
 }
