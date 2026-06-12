@@ -1,5 +1,5 @@
 use norma::agent::provider::{ProviderCandidate, ProviderService};
-use norma::config::{load_config, ProviderApiType};
+use norma::config::{ProviderApiType, load_config};
 
 fn load_e2e_config() -> norma::config::NormaConfig {
     let config_path = std::env::var("NORMA_E2E_CONFIG").expect(
@@ -28,10 +28,7 @@ fn openai_provider_e2e() {
         .or_else(|| provider.models.first())
         .expect("no model configured for OpenAI provider");
 
-    let candidate = ProviderCandidate {
-        provider,
-        model,
-    };
+    let candidate = ProviderCandidate { provider, model };
 
     let result = ProviderService::test_provider(candidate).expect("OpenAI provider test failed");
 
@@ -56,13 +53,9 @@ fn anthropic_provider_e2e() {
         .or_else(|| provider.models.first())
         .expect("no model configured for Anthropic provider");
 
-    let candidate = ProviderCandidate {
-        provider,
-        model,
-    };
+    let candidate = ProviderCandidate { provider, model };
 
-    let result =
-        ProviderService::test_provider(candidate).expect("Anthropic provider test failed");
+    let result = ProviderService::test_provider(candidate).expect("Anthropic provider test failed");
 
     assert_eq!(result.provider_id, provider.id);
     assert_eq!(result.model_id, model.model_id);
