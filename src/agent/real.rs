@@ -1,7 +1,9 @@
 use crate::agent::input::AgentRequest;
-use crate::agent::provider::{ProviderCandidate, ProviderError, ProviderService};
+use crate::agent::provider::{
+    AnthropicProviderClient, OpenAiProviderClient, ProviderClient, ProviderError, ProviderRequest,
+};
 use crate::agent::runtime::AgentRuntime;
-use crate::config::{ConfigError, NormaConfig};
+use crate::config::{ConfigError, NormaConfig, ProviderApiType};
 use crate::session::SessionEvent;
 
 #[derive(Debug, Clone)]
@@ -34,22 +36,30 @@ impl RealAgentRuntime {
         })
     }
 
-    fn candidate(&self) -> ProviderCandidate<'_> {
-        ProviderCandidate {
-            provider: &self.provider,
-            model: &self.model,
+    fn provider_client(&self) -> Result<Box<dyn ProviderClient>, ProviderError> {
+        match self.provider.api_type {
+            ProviderApiType::OpenAi => Ok(Box::new(OpenAiProviderClient::new(
+                &self.provider,
+                &self.model,
+            )?)),
+            ProviderApiType::Anthropic => Ok(Box::new(AnthropicProviderClient::new(
+                &self.provider,
+                &self.model,
+            )?)),
         }
     }
-}
 
-impl AgentRuntime for RealAgentRuntime {
-    fn run(&self, request: AgentRequest) -> Vec<SessionEvent> {
+    fn run_with_client(
+        &self,
+        request: AgentRequest,
+        client: &dyn ProviderClient,
+    ) -> Vec<SessionEvent> {
         tracing::info!(
             component = "agent",
             runtime = "real",
             provider_id = %self.provider.id,
             model_id = %self.model.model_id,
-            task = %request.task,
+            task_len = request.task.chars().count(),
             "agent task started"
         );
 
@@ -57,13 +67,16 @@ impl AgentRuntime for RealAgentRuntime {
             content: request.task.clone(),
         }];
 
-        match ProviderService::test_provider(self.candidate()) {
-            Ok(result) => {
+        let provider_request = ProviderRequest {
+            system: None,
+            prompt: request.task,
+            max_tokens: 256,
+        };
+
+        match client.complete(provider_request) {
+            Ok(response) => {
                 events.push(SessionEvent::FinalResponse {
-                    content: format!(
-                        "provider {} model {} responded: {}",
-                        result.provider_id, result.model_id, result.content_preview
-                    ),
+                    content: response.content,
                 });
             }
             Err(error) => {
@@ -85,9 +98,28 @@ impl AgentRuntime for RealAgentRuntime {
     }
 }
 
+impl AgentRuntime for RealAgentRuntime {
+    fn run(&self, request: AgentRequest) -> Vec<SessionEvent> {
+        match self.provider_client() {
+            Ok(client) => self.run_with_client(request, client.as_ref()),
+            Err(error) => vec![
+                SessionEvent::UserTask {
+                    content: request.task,
+                },
+                SessionEvent::Error {
+                    message: error.to_string(),
+                },
+            ],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent::provider::{
+        ProviderClient, ProviderRequest, ProviderResponse, ProviderTestResult,
+    };
 
     fn valid_config() -> NormaConfig {
         let root = tempfile::tempdir().unwrap();
@@ -139,5 +171,42 @@ mod tests {
         let err = RealAgentRuntime::new(invalid_config()).unwrap_err();
 
         assert!(matches!(err, RealAgentRuntimeError::InvalidConfig(_)));
+    }
+
+    #[derive(Debug)]
+    struct FakeProviderClient;
+
+    impl ProviderClient for FakeProviderClient {
+        fn complete(&self, request: ProviderRequest) -> Result<ProviderResponse, ProviderError> {
+            assert_eq!(request.system, None);
+            assert_eq!(request.prompt, "summarize project");
+            assert_eq!(request.max_tokens, 256);
+            Ok(ProviderResponse {
+                content: "runtime response".to_string(),
+                model_id: "gpt-4o-mini".to_string(),
+            })
+        }
+
+        fn test_connection(
+            &self,
+            _request: ProviderRequest,
+        ) -> Result<ProviderTestResult, ProviderError> {
+            panic!("runtime execution must use complete, not test_connection");
+        }
+    }
+
+    #[test]
+    fn runtime_execution_uses_task_prompt_for_completion() {
+        let runtime = RealAgentRuntime::new(valid_config()).unwrap();
+
+        let events = runtime.run_with_client(
+            AgentRequest::from_task("summarize project"),
+            &FakeProviderClient,
+        );
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            SessionEvent::FinalResponse { content } if content == "runtime response"
+        )));
     }
 }

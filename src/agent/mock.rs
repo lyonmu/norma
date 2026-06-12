@@ -13,7 +13,7 @@ impl AgentRuntime for MockAgentRuntime {
         tracing::info!(
             component = "agent",
             runtime = "mock",
-            task = %request.task,
+            task_len = request.task.chars().count(),
             "agent task started"
         );
         let events = vec![
@@ -53,7 +53,6 @@ impl AgentRuntime for MockAgentRuntime {
         tracing::info!(
             component = "agent",
             runtime = "mock",
-            task = %request.task,
             event_count = events.len(),
             "agent task completed"
         );

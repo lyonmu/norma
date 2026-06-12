@@ -130,14 +130,9 @@ impl NormaAppState {
         state.runtime_paths = Some(paths);
         state.config = AppConfig::from_norma_config(&config);
         match RealAgentRuntime::new(config.clone()) {
-            Ok(runtime) => {
+            Ok(_runtime) => {
                 state.runtime_config = Some(config);
                 state.runtime_error = None;
-                let mut session = SessionState::new(sample_thread());
-                for event in runtime.run_mock_task("完善 Norma 项目设计") {
-                    session.push_event(event);
-                }
-                state.session = session;
             }
             Err(error) => {
                 tracing::warn!(component = "app", error = %error, "real agent runtime unavailable");
@@ -153,6 +148,10 @@ impl NormaAppState {
         match update {
             RuntimeUpdate::ConfigApplied(config) => {
                 self.config = AppConfig::from_norma_config(&config);
+                self.runtime_error = RealAgentRuntime::new(config.clone()).err().map(|error| {
+                    tracing::warn!(component = "app", error = %error, "real agent runtime unavailable");
+                    error.to_string()
+                });
                 self.runtime_config = Some(config);
                 tracing::info!(component = "app", "runtime config update applied");
             }
@@ -280,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_config_with_valid_default_provider_uses_real_runtime_events() {
+    fn runtime_config_with_valid_default_provider_keeps_startup_session_mock_only() {
         let root = tempfile::tempdir().unwrap();
         let paths = crate::paths::NormaPaths::from_home(root.path());
         let mut runtime_config = crate::config::NormaConfig::default_for(&paths);
@@ -306,9 +305,50 @@ mod tests {
         );
 
         assert!(state.runtime_error.is_none());
-        assert!(matches!(
-            state.session.events.last(),
-            Some(crate::session::SessionEvent::Error { .. })
-        ));
+        assert!(
+            state
+                .session
+                .events
+                .iter()
+                .any(|event| matches!(event, crate::session::SessionEvent::AgentPlan { .. }))
+        );
+        assert!(
+            !state
+                .session
+                .events
+                .iter()
+                .any(|event| matches!(event, crate::session::SessionEvent::Error { .. }))
+        );
+    }
+
+    #[test]
+    fn runtime_config_reload_recomputes_runtime_error() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::NormaPaths::from_home(root.path());
+        let mut invalid = crate::config::NormaConfig::default_for(&paths);
+        invalid.ai.providers = vec![crate::config::AiProviderConfig {
+            id: "broken".to_string(),
+            name: "Broken".to_string(),
+            api_type: crate::config::ProviderApiType::OpenAi,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: "sk-test-broken".to_string(),
+            is_default: true,
+            models: vec![],
+        }];
+        let mut valid = invalid.clone();
+        valid.ai.providers[0].models = vec![crate::config::AiModelConfig {
+            id: "gpt-4o-mini".to_string(),
+            name: "GPT-4o mini".to_string(),
+            model_id: "gpt-4o-mini".to_string(),
+            is_default: true,
+        }];
+
+        let mut state =
+            NormaAppState::load_current_project_with_runtime(paths, invalid, SkillIndex::default());
+        assert!(state.runtime_error.is_some());
+
+        state.apply_runtime_update(RuntimeUpdate::ConfigApplied(valid));
+
+        assert!(state.runtime_error.is_none());
     }
 }
