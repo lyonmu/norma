@@ -1,2 +1,10 @@
 /target
 .superpowers/
+.agents/
+.codegraph/
+.comet/
+docs/
+openspec/
+opencode.jsonc
+skills-lock.json
+.Ds_Store
