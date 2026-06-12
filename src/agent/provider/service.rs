@@ -20,17 +20,23 @@ impl fmt::Debug for ProviderCandidateFingerprint {
 impl ProviderCandidateFingerprint {
     pub fn from_parts(
         provider_id: &str,
+        provider_name: &str,
         api_type: ProviderApiType,
         base_url: &str,
         api_key: &str,
-        models: &[&str],
+        is_default: bool,
+        selected_model: &str,
+        models: &[(&str, &str, &str, bool)],
         default_model: &str,
     ) -> Self {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         provider_id.hash(&mut hasher);
+        provider_name.hash(&mut hasher);
         format!("{:?}", api_type).hash(&mut hasher);
         base_url.hash(&mut hasher);
         api_key.hash(&mut hasher);
+        is_default.hash(&mut hasher);
+        selected_model.hash(&mut hasher);
         models.hash(&mut hasher);
         default_model.hash(&mut hasher);
 
@@ -164,18 +170,24 @@ mod tests {
     fn changed_candidate_invalidates_successful_test() {
         let original = ProviderCandidateFingerprint::from_parts(
             "openai-default",
+            "OpenAI",
             crate::config::ProviderApiType::OpenAi,
             "https://api.openai.com/v1",
             "sk-one",
-            &["gpt-4o-mini"],
+            true,
+            "gpt-4o-mini",
+            &[("gpt-4o-mini", "GPT-4o mini", "gpt-4o-mini", true)],
             "gpt-4o-mini",
         );
         let changed = ProviderCandidateFingerprint::from_parts(
             "openai-default",
+            "OpenAI",
             crate::config::ProviderApiType::OpenAi,
             "https://api.openai.com/v1",
             "sk-two",
-            &["gpt-4o-mini"],
+            true,
+            "gpt-4o-mini",
+            &[("gpt-4o-mini", "GPT-4o mini", "gpt-4o-mini", true)],
             "gpt-4o-mini",
         );
 
@@ -186,10 +198,13 @@ mod tests {
     fn fingerprint_debug_redacts_api_key() {
         let fingerprint = ProviderCandidateFingerprint::from_parts(
             "openai-default",
+            "OpenAI",
             crate::config::ProviderApiType::OpenAi,
             "https://api.openai.com/v1",
             "sk-secret-value",
-            &["gpt-4o-mini"],
+            true,
+            "gpt-4o-mini",
+            &[("gpt-4o-mini", "GPT-4o mini", "gpt-4o-mini", true)],
             "gpt-4o-mini",
         );
 

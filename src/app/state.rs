@@ -133,6 +133,7 @@ impl NormaAppState {
     pub fn apply_runtime_update(&mut self, update: RuntimeUpdate) {
         match update {
             RuntimeUpdate::ConfigApplied(config) => {
+                self.config = AppConfig::from_norma_config(&config);
                 self.runtime_config = Some(config);
                 tracing::info!(component = "app", "runtime config update applied");
             }
@@ -219,5 +220,43 @@ mod tests {
             "openai-default"
         );
         assert!(state.config.selected_provider().unwrap().is_default);
+    }
+
+    #[test]
+    fn runtime_config_reload_refreshes_settings_view_model() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::NormaPaths::from_home(root.path());
+        let mut initial = crate::config::NormaConfig::default_for(&paths);
+        initial.ai.providers = vec![crate::config::AiProviderConfig {
+            id: "openai-default".to_string(),
+            name: "OpenAI 默认".to_string(),
+            api_type: crate::config::ProviderApiType::OpenAi,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: "sk-test-openai-default".to_string(),
+            is_default: true,
+            models: vec![crate::config::AiModelConfig {
+                id: "gpt-4o-mini".to_string(),
+                name: "GPT-4o mini".to_string(),
+                model_id: "gpt-4o-mini".to_string(),
+                is_default: true,
+            }],
+        }];
+
+        let mut state = NormaAppState::load_current_project_with_runtime(
+            paths,
+            initial.clone(),
+            SkillIndex::default(),
+        );
+
+        let mut next = initial;
+        next.ai.providers[0].name = "OpenAI 主提供商".to_string();
+
+        state.apply_runtime_update(RuntimeUpdate::ConfigApplied(next.clone()));
+
+        assert_eq!(state.runtime_config.as_ref().unwrap(), &next);
+        assert_eq!(
+            state.config.selected_provider().unwrap().name,
+            "OpenAI 主提供商"
+        );
     }
 }

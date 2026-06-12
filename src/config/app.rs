@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::agent::provider::ProviderCandidateFingerprint;
 use crate::config::{NormaConfig, ProviderApiType};
 
@@ -69,7 +71,7 @@ impl ProviderConfigStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AiProviderConfig {
     pub id: String,
     pub name: String,
@@ -81,6 +83,26 @@ pub struct AiProviderConfig {
     pub status: ProviderConfigStatus,
     pub is_default: bool,
     pub tested_candidate_fingerprint: Option<ProviderCandidateFingerprint>,
+}
+
+impl fmt::Debug for AiProviderConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiProviderConfig")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("protocol", &self.protocol)
+            .field("base_url", &self.base_url)
+            .field("api_key_reference", &"[redacted]")
+            .field("model", &self.model)
+            .field("models", &self.models)
+            .field("status", &self.status)
+            .field("is_default", &self.is_default)
+            .field(
+                "tested_candidate_fingerprint",
+                &self.tested_candidate_fingerprint,
+            )
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,10 +144,17 @@ impl AiProviderConfig {
     }
 
     pub fn candidate_fingerprint(&self) -> ProviderCandidateFingerprint {
-        let models: Vec<&str> = self
+        let models: Vec<(&str, &str, &str, bool)> = self
             .models
             .iter()
-            .map(|model| model.model_id.as_str())
+            .map(|model| {
+                (
+                    model.id.as_str(),
+                    model.name.as_str(),
+                    model.model_id.as_str(),
+                    model.is_default,
+                )
+            })
             .collect();
         let default_model = self
             .default_model()
@@ -134,9 +163,12 @@ impl AiProviderConfig {
 
         ProviderCandidateFingerprint::from_parts(
             &self.id,
+            &self.name,
             self.api_type(),
             &self.base_url,
             &self.api_key_reference,
+            self.is_default,
+            &self.model,
             &models,
             default_model,
         )
@@ -147,9 +179,11 @@ impl AiProviderConfig {
     }
 
     pub fn can_save(&self) -> bool {
-        self.tested_candidate_fingerprint
-            .as_ref()
-            .is_some_and(|fingerprint| fingerprint == &self.candidate_fingerprint())
+        self.is_valid_for_preview()
+            && self
+                .tested_candidate_fingerprint
+                .as_ref()
+                .is_some_and(|fingerprint| fingerprint == &self.candidate_fingerprint())
     }
 
     fn api_type(&self) -> ProviderApiType {
@@ -416,6 +450,130 @@ mod tests {
             ]
         );
         assert!(!provider.is_valid_for_preview());
+    }
+
+    #[test]
+    fn fingerprint_changes_when_display_fields_or_default_flags_change() {
+        let provider = AiProviderConfig {
+            id: "openai-default".to_string(),
+            name: "OpenAI 默认".to_string(),
+            protocol: ProviderProtocol::OpenAi,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key_reference: "sk-preview-openai-default".to_string(),
+            model: "gpt-4o".to_string(),
+            models: vec![ProviderModelRow {
+                id: "gpt-4o".to_string(),
+                name: "GPT-4o".to_string(),
+                model_id: "gpt-4o".to_string(),
+                is_default: true,
+            }],
+            status: ProviderConfigStatus::Complete,
+            is_default: true,
+            tested_candidate_fingerprint: None,
+        };
+
+        let mut renamed = provider.clone();
+        renamed.name = "OpenAI 主提供商".to_string();
+        assert_ne!(
+            provider.candidate_fingerprint(),
+            renamed.candidate_fingerprint()
+        );
+
+        let mut model_renamed = provider.clone();
+        model_renamed.models[0].name = "GPT-4o 主模型".to_string();
+        assert_ne!(
+            provider.candidate_fingerprint(),
+            model_renamed.candidate_fingerprint()
+        );
+
+        let mut default_changed = provider.clone();
+        default_changed.is_default = false;
+        assert_ne!(
+            provider.candidate_fingerprint(),
+            default_changed.candidate_fingerprint()
+        );
+    }
+
+    #[test]
+    fn stale_successful_test_blocks_save() {
+        let mut provider = AiProviderConfig {
+            id: "openai-default".to_string(),
+            name: "OpenAI 默认".to_string(),
+            protocol: ProviderProtocol::OpenAi,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key_reference: "sk-preview-openai-default".to_string(),
+            model: "gpt-4o".to_string(),
+            models: vec![ProviderModelRow {
+                id: "gpt-4o".to_string(),
+                name: "GPT-4o".to_string(),
+                model_id: "gpt-4o".to_string(),
+                is_default: true,
+            }],
+            status: ProviderConfigStatus::Complete,
+            is_default: true,
+            tested_candidate_fingerprint: None,
+        };
+
+        provider.mark_tested();
+        provider.models[0].name = "GPT-4o renamed".to_string();
+
+        assert!(!provider.can_save());
+    }
+
+    #[test]
+    fn invalid_candidate_cannot_save_even_after_test() {
+        let mut provider = AiProviderConfig {
+            id: "openai-default".to_string(),
+            name: "".to_string(),
+            protocol: ProviderProtocol::OpenAi,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key_reference: "sk-preview-openai-default".to_string(),
+            model: "gpt-4o".to_string(),
+            models: vec![ProviderModelRow {
+                id: "gpt-4o".to_string(),
+                name: "GPT-4o".to_string(),
+                model_id: "gpt-4o".to_string(),
+                is_default: true,
+            }],
+            status: ProviderConfigStatus::Invalid,
+            is_default: true,
+            tested_candidate_fingerprint: None,
+        };
+
+        provider.mark_tested();
+
+        assert!(!provider.can_save());
+    }
+
+    #[test]
+    fn provider_rows_are_derived_from_runtime_config() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = crate::paths::NormaPaths::from_home(root.path());
+        let mut runtime_config = NormaConfig::default_for(&paths);
+        runtime_config.ai.providers = vec![crate::config::AiProviderConfig {
+            id: "anthropic-default".to_string(),
+            name: "Anthropic Default".to_string(),
+            api_type: ProviderApiType::Anthropic,
+            base_url: "https://api.anthropic.com".to_string(),
+            api_key: "sk-ant-test-secret".to_string(),
+            is_default: true,
+            models: vec![crate::config::AiModelConfig {
+                id: "claude-sonnet".to_string(),
+                name: "Claude Sonnet".to_string(),
+                model_id: "claude-3-5-sonnet-latest".to_string(),
+                is_default: true,
+            }],
+        }];
+
+        let app_config = AppConfig::from_norma_config(&runtime_config);
+        let provider = app_config.selected_provider().unwrap();
+
+        assert_eq!(provider.id, "anthropic-default");
+        assert_eq!(provider.protocol, ProviderProtocol::Anthropic);
+        assert_eq!(provider.models.len(), 1);
+        assert_eq!(provider.models[0].name, "Claude Sonnet");
+        assert_eq!(provider.models[0].model_id, "claude-3-5-sonnet-latest");
+        assert_eq!(provider.masked_api_key(), "••••••••••••cret");
     }
 
     #[test]

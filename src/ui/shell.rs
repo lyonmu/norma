@@ -101,11 +101,18 @@ fn top_toolbar(state: &NormaAppState) -> impl IntoElement {
                 .gap_2()
                 .child(components::icon_button("▶"))
                 .child(components::icon_button("🔔"))
-                .child(settings_button(state.config.clone())),
+                .child(settings_button(state)),
         )
 }
 
-fn settings_button(config: crate::config::AppConfig) -> impl IntoElement {
+fn settings_button(state: &NormaAppState) -> impl IntoElement {
+    let config = state.config.clone();
+    let runtime_config = state.runtime_config.clone();
+    let config_file = state
+        .runtime_paths
+        .as_ref()
+        .map(|paths| paths.config_file.clone());
+
     div()
         .id(SharedString::from("settings-button"))
         .w(px(32.))
@@ -129,8 +136,13 @@ fn settings_button(config: crate::config::AppConfig) -> impl IntoElement {
                 ..WindowOptions::default()
             };
             let config = config.clone();
-            cx.open_window(options, |_, cx| cx.new(|_| SettingsWindow::new(config)))
-                .expect("failed to open Norma settings window");
+            cx.open_window(options, |_, cx| {
+                let config = config.clone();
+                let runtime_config = runtime_config.clone();
+                let config_file = config_file.clone();
+                cx.new(|_| SettingsWindow::new(config, runtime_config, config_file))
+            })
+            .expect("failed to open Norma settings window");
         })
 }
 
