@@ -2,9 +2,9 @@
 
 ## Project Summary
 
-Norma is a Rust 2024 desktop agent/workbench built with Cargo and GPUI. The current code implements a GPUI workbench shell, local project/file context, read-only Git status summaries, mock agent session events, app settings preview UI, local `~/.norma` paths, TOML configuration, structured tracing logs, config/skills watchers, and a non-executing Skills directory index.
+Norma is a Rust 2024 desktop agent/workbench built with Cargo and GPUI. The current code implements a GPUI workbench shell, local project/file context, read-only Git status summaries, mock agent session events, app settings UI with save-gated provider testing, local `~/.norma` paths, TOML configuration, structured tracing logs, config/skills watchers, and a non-executing Skills directory index.
 
-The codebase has been reorganized into domain directories for runtime, logging, config, app state, workspace, Git, session, skills, and agent abstractions. The `agent/` domain includes structured input, provider, and tool-use model boundaries, but these are abstractions only: they do not execute real providers, network requests, tools, MCP, ACP, Skills, sub-agents, or multi-agent workflows yet.
+The codebase has been reorganized into domain directories for runtime, logging, config, app state, workspace, Git, session, skills, and agent abstractions. The `agent/` domain includes structured input, provider, and tool-use model boundaries. Provider settings can run a low-cost real provider connection test through the provider abstraction; general runtime model calls, tools, MCP, ACP, executable Skills, sub-agents, and multi-agent workflows remain roadmap unless corresponding runtime implementation and tests exist.
 
 README files and package metadata describe the broader product direction. Treat multi-model support, MCP, ACP, executable Skills, sub-agents, and multi-agent collaboration as roadmap unless the corresponding runtime implementation and tests exist.
 
@@ -25,7 +25,7 @@ Do not add `gpui_platform`; this crate depends on `gpui`.
 - `src/lib.rs`: module exports only.
 - `src/runtime/`: startup orchestration, runtime update messages, and config/skills watchers.
 - `src/logging/`: tracing initialization, JSON log writing, rotation, compression, retention, and logging errors.
-- `src/config/`: app settings preview models, persisted runtime config, TOML read/write, validation, environment overrides, and reload state.
+- `src/config/`: app settings models, persisted runtime config, TOML read/write, validation, environment overrides, and reload state.
 - `src/paths/`: local `~/.norma` path contract and directory creation.
 - `src/skills/`: scans and reloads `~/.norma/skills` without executing skills.
 - `src/workspace/`: project opening and file-tree loading.

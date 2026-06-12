@@ -1,10 +1,12 @@
 # Norma AI Provider Settings Implementation Plan
 
+> Historical note: this plan described the initial preview-only settings window. The later `rig-provider-abstraction` change supersedes the preview-only provider-test/save assumptions by adding save-gated real provider connection testing through the provider abstraction.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a separate Norma application settings window for preview-only AI provider configuration without interrupting the active workbench session.
+**Goal:** Build a separate Norma application settings window for AI provider configuration without interrupting the active workbench session. This original plan targeted preview-only configuration; later provider abstraction work adds real connection testing and save gating.
 
-**Architecture:** Add a focused `config` module for settings data and validation, then thread `AppConfig` through `NormaAppState` so both the workbench and settings window can render from the same app-level state. Implement the settings UI as its own GPUI root view under `ui::settings`, opened from the top-right toolbar settings icon with a separate `open_window` call. Keep provider configuration preview-only: no model calls and no network-based connection tests.
+**Architecture:** Add a focused `config` module for settings data and validation, then thread `AppConfig` through `NormaAppState` so both the workbench and settings window can render from the same app-level state. Implement the settings UI as its own GPUI root view under `ui::settings`, opened from the top-right toolbar settings icon with a separate `open_window` call. This plan's preview-only test/save assumptions are historical; the provider abstraction change adds real low-cost provider connection tests before saving.
 
 **Tech Stack:** Rust 2024, GPUI `0.2.2`, existing Norma UI helpers and theme module, standard Rust unit tests. No new dependencies are required for this plan.
 
@@ -14,7 +16,7 @@
 
 This plan implements `docs/superpowers/specs/2026-06-11-norma-ai-provider-settings-design.md`.
 
-The scope is one subsystem: an app-level settings window with AI provider configuration. It does not implement Rig integration, real model calls, real provider connection tests, persistent secret storage, MCP, Skills, account management, billing, or right-inspector settings replacement.
+The scope was one subsystem: an app-level settings window with AI provider configuration. Rig integration and real provider connection tests are handled by the later provider abstraction change; real chat/session model calls, persistent secret storage, MCP, Skills, account management, billing, and right-inspector settings replacement remain outside this original plan.
 
 ## Current Repository Facts
 
