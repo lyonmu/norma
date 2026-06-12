@@ -116,6 +116,37 @@ mod tests {
     }
 
     #[test]
+    fn writes_and_loads_provider_config_without_logging_secret() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = NormaPaths::from_home(root.path());
+        paths.create_all().unwrap();
+        let mut config = NormaConfig::default_for(&paths);
+        config.ai.providers = vec![crate::config::AiProviderConfig {
+            id: "anthropic-default".to_string(),
+            name: "Anthropic Default".to_string(),
+            api_type: crate::config::ProviderApiType::Anthropic,
+            base_url: "https://api.anthropic.com".to_string(),
+            api_key: "sk-ant-test-secret".to_string(),
+            is_default: true,
+            models: vec![crate::config::AiModelConfig {
+                id: "claude-sonnet".to_string(),
+                name: "Claude Sonnet".to_string(),
+                model_id: "claude-3-5-sonnet-latest".to_string(),
+                is_default: true,
+            }],
+        }];
+
+        write_config(&paths.config_file, &config).unwrap();
+        let loaded = load_config(&paths.config_file).unwrap();
+
+        assert_eq!(loaded.ai.providers[0].api_key, "sk-ant-test-secret");
+        assert_eq!(
+            loaded.default_provider_and_model().unwrap().1.model_id,
+            "claude-3-5-sonnet-latest"
+        );
+    }
+
+    #[test]
     fn rejects_invalid_log_level() {
         let root = tempfile::tempdir().unwrap();
         let paths = NormaPaths::from_home(root.path());
