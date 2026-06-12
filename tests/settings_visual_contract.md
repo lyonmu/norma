@@ -18,7 +18,7 @@ Use this checklist when verifying `docs/superpowers/specs/2026-06-11-norma-ai-pr
 - [ ] The left navigation includes `通用`, `AI 提供商`, `运行环境`, `安全`, `Git`, and `外观`.
 - [ ] `AI 提供商` is selected with a soft blue tint.
 - [ ] The right pane title is `AI 提供商`.
-- [ ] The helper text says `为后续模型调用配置不同协议格式的提供商。`.
+- [ ] The helper text says `测试通过后才能保存配置。配置会写入本机 ~/.norma/config.toml。`.
 - [ ] Provider rows are grouped with separators rather than separate cards.
 - [ ] The selected provider row is lightly tinted.
 

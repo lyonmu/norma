@@ -8,7 +8,7 @@ Norma needs a separate application settings window for configuring AI providers.
 
 The selected direction is based on the first visual concept: a calm, compact settings surface that inherits Norma's Review-First Codex Workbench language while moving configuration into its own app-level window.
 
-This design covers UI structure, provider configuration fields, preview-only states, and future integration boundaries. It does not implement real provider calls.
+This design covers UI structure, provider configuration fields, save-gated provider test state, and integration boundaries. Provider connection testing is implemented by the Rig provider abstraction change.
 
 ## Product Goals
 
@@ -16,12 +16,12 @@ This design covers UI structure, provider configuration fields, preview-only sta
 - Support exactly two protocol formats at this stage: `OpenAI` and `Anthropic`.
 - Keep the active task conversation available while settings are open.
 - Provide a settings structure that can later expand to other app-level options.
-- Prepare for later model-call integration through Rig plus a custom Provider abstraction layer.
+- Prepare provider records for model-call integration through Rig plus a custom Provider abstraction layer.
 
 ## Non-Goals
 
-- Do not call real models from this settings page.
-- Do not run real provider connection tests in this phase.
+- Do not call real models for chat/session generation from this settings page.
+- Do not save provider configuration until the current provider candidate has passed a connection test.
 - Do not add MCP, Skills, automation, tool-calling, pricing, quota, account, profile, or billing settings.
 - Do not turn the right workbench inspector into the full settings surface.
 - Do not interrupt or mutate the active session thread when opening, editing, saving, or closing settings.
@@ -80,16 +80,16 @@ Navigation rows are quiet list rows with a soft selected tint. They are not larg
 
 ## AI Provider Pane
 
-The `AI 提供商` pane configures provider records for later model calls. It may save preview configuration, but must not imply that Norma can already call real providers.
+The `AI 提供商` pane configures provider records for model calls. It may run a low-cost provider connection test, but must not imply that the active agent runtime is already using the provider for full chat/session generation.
 
 The pane includes:
 
 - title `AI 提供商`
-- helper text `为后续模型调用配置不同协议格式的提供商。`
+- helper text `测试通过后才能保存配置。配置会写入本机 ~/.norma/config.toml。`
 - icon-led `新增提供商` action
 - grouped provider list with row separators
 - selected provider detail editor
-- implementation note `模型调用将在后续通过 Rig + 自研 Provider 抽象层接入。当前仅保存配置预览。`
+- provider test/save note `测试通过后才能保存配置。配置会写入本机 ~/.norma/config.toml。`
 
 Provider list rows show:
 
@@ -98,7 +98,7 @@ Provider list rows show:
 - model name, such as `gpt-4o` or `claude-3-5-sonnet`
 - status, such as `配置完整` or `待测试`
 
-The selected provider row uses a soft blue tint. Status is textual and restrained; it should not look like a live operational health monitor until real connection tests exist.
+The selected provider row uses a soft blue tint. Status is textual and restrained; it should communicate candidate test/save readiness without looking like a broad account or billing health monitor.
 
 ## Provider Editor
 
@@ -120,9 +120,9 @@ The selected provider editor includes exactly these required configuration field
 The action area includes:
 
 - primary `保存配置`
-- disabled or preview-only `测试连接（预览）`
+- `测试连接`
 
-`测试连接（预览）` must not perform a network request in this phase. It may show disabled styling, a preview badge, or helper text explaining that real validation arrives with the provider runtime.
+`测试连接` runs a low-cost provider test through the provider abstraction. `保存配置` remains unavailable until the tested candidate fingerprint matches the current provider candidate.
 
 ## Data Model Boundaries
 
@@ -142,7 +142,7 @@ Validation stays local to the settings window:
 - missing provider fields show inline errors in the provider editor
 - invalid protocol state is impossible through the segmented control
 - API keys remain masked unless the user explicitly reveals them
-- connection failures are not possible in this phase because connection tests are preview-only
+- connection failures are shown as provider-test errors and must not expose raw API keys or credentials
 
 Global modal errors should be rare. Provider editing errors belong inside the provider editor.
 
@@ -156,8 +156,8 @@ Global modal errors should be rare. Provider editing errors belong inside the pr
 - Provider records expose `名称`, `协议类型`, `Base URL`, `API Key`, and `模型`.
 - Protocol selection is limited to `OpenAI` and `Anthropic`.
 - API keys are masked by default.
-- `测试连接（预览）` is disabled or clearly preview-only and performs no network call.
-- The pane includes the Rig plus custom Provider abstraction note.
+- `测试连接` runs the configured provider test path and updates tested state on success.
+- `保存配置` is blocked until the current provider candidate matches the successful test state.
 - The visual style matches Norma's calm, compact, light desktop workbench language.
 
 ## Implementation Notes
