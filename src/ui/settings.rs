@@ -11,7 +11,7 @@ use crate::config::{
     AppConfig, ConfigError, NormaConfig, ProviderApiType, ProviderConfigStatus, SettingsSection,
     write_config,
 };
-use crate::ui::{components, theme, text_input::TextInput};
+use crate::ui::{components, theme, input::{SecureTextField, TextField}};
 
 #[derive(Clone)]
 struct SettingsWindowState {
@@ -20,12 +20,20 @@ struct SettingsWindowState {
     config_file: Option<PathBuf>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProviderField {
+    Name,
+    BaseUrl,
+    ApiKey,
+    Model,
+}
+
 pub struct SettingsWindow {
     state: Arc<Mutex<SettingsWindowState>>,
-    name_input: Option<Entity<TextInput>>,
-    base_url_input: Option<Entity<TextInput>>,
-    api_key_input: Option<Entity<TextInput>>,
-    model_input: Option<Entity<TextInput>>,
+    name_input: Option<Entity<TextField>>,
+    base_url_input: Option<Entity<TextField>>,
+    api_key_input: Option<Entity<SecureTextField>>,
+    model_input: Option<Entity<TextField>>,
     current_provider_id: Option<String>,
 }
 
@@ -51,6 +59,19 @@ impl SettingsWindow {
 }
 
 impl SettingsWindowState {
+    fn update_selected_provider_field(&mut self, field: ProviderField, value: String) {
+        if let Some(provider) = self.config.selected_provider_mut() {
+            match field {
+                ProviderField::Name => provider.name = value,
+                ProviderField::BaseUrl => provider.base_url = value,
+                ProviderField::ApiKey => provider.api_key_reference = value,
+                ProviderField::Model => provider.model = value,
+            }
+            provider.status = ProviderConfigStatus::PreviewUnvalidated;
+            provider.tested_candidate_fingerprint = None;
+        }
+    }
+
     fn test_selected_provider(
         &mut self,
         test_provider: impl Fn(
@@ -149,69 +170,67 @@ impl Render for SettingsWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let config = self.state.lock().unwrap().config.clone();
         
-        // Update TextInput entities when selected provider changes
+        // Update input entities when selected provider changes
         let selected_id = config.selected_provider_id.clone();
         if self.current_provider_id != selected_id {
             self.current_provider_id = selected_id;
             if let Some(provider) = config.selected_provider() {
-                // Create TextInput entities with on_change callbacks
-                let state = Arc::clone(&self.state);
-                let provider_id = provider.id.clone();
-                let state_clone = state.clone();
-                let provider_id_clone = provider_id.clone();
-                let state_clone2 = state.clone();
-                let provider_id_clone2 = provider_id.clone();
-                let state_clone3 = state.clone();
-                let provider_id_clone3 = provider_id.clone();
-                
-                self.name_input = Some(TextInput::new_with_callback(
+                self.name_input = Some(TextField::new(
                     cx,
                     "提供商名称",
                     &provider.name,
-                    Some(Box::new(move |content| {
-                        let mut guard = state.lock().unwrap();
-                        if let Some(provider) = guard.config.selected_provider_mut() {
-                            provider.name = content;
-                            tracing::info!(component = "settings", provider_id = %provider_id, "name updated");
+                    Some(Box::new({
+                        let state = Arc::clone(&self.state);
+                        move |content| {
+                            state
+                                .lock()
+                                .unwrap()
+                                .update_selected_provider_field(ProviderField::Name, content);
                         }
                     })),
                 ));
-                
-                self.base_url_input = Some(TextInput::new_with_callback(
+
+                self.base_url_input = Some(TextField::new(
                     cx,
                     "Base URL",
                     &provider.base_url,
-                    Some(Box::new(move |content| {
-                        let mut guard = state_clone.lock().unwrap();
-                        if let Some(provider) = guard.config.selected_provider_mut() {
-                            provider.base_url = content;
-                            tracing::info!(component = "settings", provider_id = %provider_id_clone, "base_url updated");
+                    Some(Box::new({
+                        let state = Arc::clone(&self.state);
+                        move |content| {
+                            state
+                                .lock()
+                                .unwrap()
+                                .update_selected_provider_field(ProviderField::BaseUrl, content);
                         }
                     })),
                 ));
-                
-                self.api_key_input = Some(TextInput::new_with_callback(
+
+                self.api_key_input = Some(SecureTextField::new(
                     cx,
                     "API Key",
                     &provider.api_key_reference,
-                    Some(Box::new(move |content| {
-                        let mut guard = state_clone2.lock().unwrap();
-                        if let Some(provider) = guard.config.selected_provider_mut() {
-                            provider.api_key_reference = content;
-                            tracing::info!(component = "settings", provider_id = %provider_id_clone2, "api_key updated");
+                    Some(Box::new({
+                        let state = Arc::clone(&self.state);
+                        move |content| {
+                            state
+                                .lock()
+                                .unwrap()
+                                .update_selected_provider_field(ProviderField::ApiKey, content);
                         }
                     })),
                 ));
-                
-                self.model_input = Some(TextInput::new_with_callback(
+
+                self.model_input = Some(TextField::new(
                     cx,
                     "模型 ID",
                     &provider.model,
-                    Some(Box::new(move |content| {
-                        let mut guard = state_clone3.lock().unwrap();
-                        if let Some(provider) = guard.config.selected_provider_mut() {
-                            provider.model = content;
-                            tracing::info!(component = "settings", provider_id = %provider_id_clone3, "model updated");
+                    Some(Box::new({
+                        let state = Arc::clone(&self.state);
+                        move |content| {
+                            state
+                                .lock()
+                                .unwrap()
+                                .update_selected_provider_field(ProviderField::Model, content);
                         }
                     })),
                 ));
@@ -301,10 +320,10 @@ fn settings_navigation(active: SettingsSection) -> AnyElement {
 fn settings_content(
     state: &Arc<Mutex<SettingsWindowState>>,
     config: &AppConfig,
-    name_input: Option<&Entity<TextInput>>,
-    base_url_input: Option<&Entity<TextInput>>,
-    api_key_input: Option<&Entity<TextInput>>,
-    model_input: Option<&Entity<TextInput>>,
+    name_input: Option<&Entity<TextField>>,
+    base_url_input: Option<&Entity<TextField>>,
+    api_key_input: Option<&Entity<SecureTextField>>,
+    model_input: Option<&Entity<TextField>>,
 ) -> AnyElement {
     match config.active_settings_section {
         SettingsSection::AiProviders => ai_provider_pane(state, config, name_input, base_url_input, api_key_input, model_input),
@@ -315,10 +334,10 @@ fn settings_content(
 fn ai_provider_pane(
     state: &Arc<Mutex<SettingsWindowState>>,
     config: &AppConfig,
-    name_input: Option<&Entity<TextInput>>,
-    base_url_input: Option<&Entity<TextInput>>,
-    api_key_input: Option<&Entity<TextInput>>,
-    model_input: Option<&Entity<TextInput>>,
+    name_input: Option<&Entity<TextField>>,
+    base_url_input: Option<&Entity<TextField>>,
+    api_key_input: Option<&Entity<SecureTextField>>,
+    model_input: Option<&Entity<TextField>>,
 ) -> AnyElement {
     div()
         .size_full()
@@ -469,10 +488,10 @@ fn status_label(status: crate::config::ProviderConfigStatus) -> AnyElement {
 fn provider_editor(
     state: &Arc<Mutex<SettingsWindowState>>,
     config: &AppConfig,
-    name_input: Option<&Entity<TextInput>>,
-    base_url_input: Option<&Entity<TextInput>>,
-    api_key_input: Option<&Entity<TextInput>>,
-    model_input: Option<&Entity<TextInput>>,
+    name_input: Option<&Entity<TextField>>,
+    base_url_input: Option<&Entity<TextField>>,
+    api_key_input: Option<&Entity<SecureTextField>>,
+    model_input: Option<&Entity<TextField>>,
 ) -> AnyElement {
     let Some(provider) = config.selected_provider() else {
         return div()
@@ -497,11 +516,11 @@ fn provider_editor(
         .flex_col()
         .gap_4()
         .child(components::section_title("提供商配置"))
-        .child(editable_form_row("名称", name_input))
+        .child(editable_text_form_row("名称", name_input))
         .child(protocol_segment(provider.protocol))
-        .child(editable_form_row("Base URL", base_url_input))
-        .child(editable_form_row("API Key", api_key_input))
-        .child(editable_form_row("模型", model_input))
+        .child(editable_text_form_row("Base URL", base_url_input))
+        .child(editable_secure_form_row("API Key", api_key_input))
+        .child(editable_text_form_row("模型", model_input))
         .child(model_list(config, provider.id.as_str()))
         .child(
             div()
@@ -596,28 +615,23 @@ fn action_button(label: &'static str, active: bool, on_click: impl Fn() + 'stati
         .into_any_element()
 }
 
-fn editable_form_row(label: &str, input: Option<&Entity<TextInput>>) -> AnyElement {
+fn editable_text_form_row(label: &str, input: Option<&Entity<TextField>>) -> AnyElement {
     div()
         .flex()
         .flex_col()
         .gap_2()
         .child(components::label(label))
-        .child(
-            div()
-                .h(px(38.))
-                .rounded(px(8.))
-                .border_1()
-                .border_color(theme::border())
-                .bg(theme::surface())
-                .px_3()
-                .flex()
-                .items_center()
-                .child(
-                    div()
-                        .flex_1()
-                        .children(input.cloned()),
-                ),
-        )
+        .children(input.cloned())
+        .into_any_element()
+}
+
+fn editable_secure_form_row(label: &str, input: Option<&Entity<SecureTextField>>) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(components::label(label))
+        .children(input.cloned())
         .into_any_element()
 }
 
