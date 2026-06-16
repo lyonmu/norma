@@ -250,7 +250,10 @@ impl TextBuffer {
         self.redo_stack.clear();
     }
 
-    pub fn apply_command(&mut self, command: crate::ui::input::InputCommand) -> Result<EditOutcome, TextEditError> {
+    pub fn apply_command(
+        &mut self,
+        command: crate::ui::input::InputCommand,
+    ) -> Result<EditOutcome, TextEditError> {
         match command {
             crate::ui::input::InputCommand::InsertText(text) => self.insert_text(&text),
             crate::ui::input::InputCommand::InsertNewline => self.insert_text("\n"),

@@ -7,7 +7,10 @@ use gpui::{
 
 use crate::app::NormaAppState;
 use crate::runtime::RuntimeUpdate;
-use crate::ui::{components, execution, input::ComposerInput, inspector, settings::SettingsWindow, sidebar, theme};
+use crate::ui::{
+    components, execution, input::ComposerInput, inspector, settings::SettingsWindow, sidebar,
+    theme,
+};
 
 pub struct AppShell {
     state: NormaAppState,
@@ -69,7 +72,10 @@ impl Render for AppShell {
                             .flex_1()
                             .h_full()
                             .p_6()
-                            .child(execution::render_execution(&self.state.session, self.composer_input.as_ref())),
+                            .child(execution::render_execution(
+                                &self.state.session,
+                                self.composer_input.as_ref(),
+                            )),
                     )
                     .child(
                         div()

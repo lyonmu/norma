@@ -5,9 +5,7 @@ use gpui::{
 };
 
 use crate::ui::{
-    input::{
-        DisplayMode, InputCommand, InputMode, KeyBindingContext, TextBuffer, key_to_command,
-    },
+    input::{DisplayMode, InputCommand, InputMode, KeyBindingContext, TextBuffer, key_to_command},
     theme,
 };
 
@@ -41,6 +39,7 @@ pub struct TextArea {
     max_height: gpui::Pixels,
 }
 
+#[allow(dead_code)]
 pub struct FormField {
     label: String,
     help_text: Option<String>,
@@ -87,14 +86,24 @@ impl TextField {
         cx.notify();
     }
 
-    fn handle_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn handle_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(command) = key_to_command(&event.keystroke, KeyBindingContext::TextField) else {
             return;
         };
         self.apply_command(command, window, cx);
     }
 
-    fn apply_command(&mut self, command: InputCommand, window: &mut Window, cx: &mut Context<Self>) {
+    fn apply_command(
+        &mut self,
+        command: InputCommand,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.disabled {
             return;
         }
@@ -107,22 +116,35 @@ impl TextField {
                 }
             }
             InputCommand::Blur => window.blur(),
-            InputCommand::Copy => cx.write_to_clipboard(gpui::ClipboardItem::new_string(self.buffer.selected_text().to_string())),
+            InputCommand::Copy => cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                self.buffer.selected_text().to_string(),
+            )),
             InputCommand::Cut if !self.read_only => {
-                cx.write_to_clipboard(gpui::ClipboardItem::new_string(self.buffer.selected_text().to_string()));
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                    self.buffer.selected_text().to_string(),
+                ));
                 if self.buffer.delete_backward().changed {
                     self.emit_change();
                 }
             }
             InputCommand::Paste if !self.read_only => {
-                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-                    if self.buffer.insert_text(&text).map(|outcome| outcome.changed).unwrap_or(false) {
-                        self.emit_change();
-                    }
+                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text())
+                    && self
+                        .buffer
+                        .insert_text(&text)
+                        .map(|outcome| outcome.changed)
+                        .unwrap_or(false)
+                {
+                    self.emit_change();
                 }
             }
             command if !self.read_only => {
-                if self.buffer.apply_command(command).map(|outcome| outcome.changed).unwrap_or(false) {
+                if self
+                    .buffer
+                    .apply_command(command)
+                    .map(|outcome| outcome.changed)
+                    .unwrap_or(false)
+                {
                     self.emit_change();
                 }
             }
@@ -137,7 +159,12 @@ impl TextField {
         }
     }
 
-    fn on_mouse_down(&mut self, _: &gpui::MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_mouse_down(
+        &mut self,
+        _: &gpui::MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         cx.focus_self(window);
     }
 }
@@ -211,7 +238,8 @@ impl Render for SecureTextField {
         )
         .track_focus(&self.field.focus_handle)
         .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
-            let Some(command) = key_to_command(&event.keystroke, KeyBindingContext::TextField) else {
+            let Some(command) = key_to_command(&event.keystroke, KeyBindingContext::TextField)
+            else {
                 return;
             };
             if this.field.disabled {
@@ -226,38 +254,54 @@ impl Render for SecureTextField {
                     }
                 }
                 InputCommand::Blur => window.blur(),
-                InputCommand::Copy => cx.write_to_clipboard(gpui::ClipboardItem::new_string(this.field.buffer.selected_text().to_string())),
+                InputCommand::Copy => cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                    this.field.buffer.selected_text().to_string(),
+                )),
                 InputCommand::Cut if !this.field.read_only => {
-                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(this.field.buffer.selected_text().to_string()));
-                    if this.field.buffer.delete_backward().changed {
-                        if let Some(on_change) = &this.field.on_change {
-                            on_change(this.field.buffer.text().to_string());
-                        }
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                        this.field.buffer.selected_text().to_string(),
+                    ));
+                    if this.field.buffer.delete_backward().changed
+                        && let Some(on_change) = &this.field.on_change
+                    {
+                        on_change(this.field.buffer.text().to_string());
                     }
                 }
                 InputCommand::Paste if !this.field.read_only => {
-                    if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-                        if this.field.buffer.insert_text(&text).map(|outcome| outcome.changed).unwrap_or(false) {
-                            if let Some(on_change) = &this.field.on_change {
-                                on_change(this.field.buffer.text().to_string());
-                            }
-                        }
+                    if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text())
+                        && this
+                            .field
+                            .buffer
+                            .insert_text(&text)
+                            .map(|outcome| outcome.changed)
+                            .unwrap_or(false)
+                        && let Some(on_change) = &this.field.on_change
+                    {
+                        on_change(this.field.buffer.text().to_string());
                     }
                 }
                 command if !this.field.read_only => {
-                    if this.field.buffer.apply_command(command).map(|outcome| outcome.changed).unwrap_or(false) {
-                        if let Some(on_change) = &this.field.on_change {
-                            on_change(this.field.buffer.text().to_string());
-                        }
+                    if this
+                        .field
+                        .buffer
+                        .apply_command(command)
+                        .map(|outcome| outcome.changed)
+                        .unwrap_or(false)
+                        && let Some(on_change) = &this.field.on_change
+                    {
+                        on_change(this.field.buffer.text().to_string());
                     }
                 }
                 _ => {}
             }
             cx.notify();
         }))
-        .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, _cx| {
-            this.field.focus_handle.focus(window);
-        }))
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(|this, _, window, _cx| {
+                this.field.focus_handle.focus(window);
+            }),
+        )
         .child(
             div()
                 .id(SharedString::from("secure-input-reveal"))
@@ -324,30 +368,46 @@ impl Render for TextArea {
             } else {
                 theme::border()
             })
-            .bg(if self.disabled { theme::surface_tint() } else { theme::surface() })
+            .bg(if self.disabled {
+                theme::surface_tint()
+            } else {
+                theme::surface()
+            })
             .px_3()
             .py_2()
             .text_size(px(14.))
-            .text_color(if is_empty { theme::muted() } else { theme::text() })
+            .text_color(if is_empty {
+                theme::muted()
+            } else {
+                theme::text()
+            })
             .cursor(CursorStyle::IBeam)
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
-                let Some(command) = key_to_command(&event.keystroke, KeyBindingContext::TextArea) else {
+                let Some(command) = key_to_command(&event.keystroke, KeyBindingContext::TextArea)
+                else {
                     return;
                 };
                 if this.disabled || this.read_only {
                     return;
                 }
-                if this.buffer.apply_command(command).map(|outcome| outcome.changed).unwrap_or(false) {
-                    if let Some(on_change) = &this.on_change {
-                        on_change(this.buffer.text().to_string());
-                    }
+                if this
+                    .buffer
+                    .apply_command(command)
+                    .map(|outcome| outcome.changed)
+                    .unwrap_or(false)
+                    && let Some(on_change) = &this.on_change
+                {
+                    on_change(this.buffer.text().to_string());
                 }
                 cx.notify();
             }))
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, _cx| {
-                this.focus_handle.focus(window);
-            }))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, window, _cx| {
+                    this.focus_handle.focus(window);
+                }),
+            )
             .child(text)
     }
 }
@@ -371,7 +431,11 @@ fn render_input_shell(
         } else {
             theme::border()
         })
-        .bg(if disabled { theme::surface_tint() } else { theme::surface() })
+        .bg(if disabled {
+            theme::surface_tint()
+        } else {
+            theme::surface()
+        })
         .px_3()
         .flex()
         .items_center()

@@ -3,7 +3,10 @@ use gpui::{AnyElement, Entity, ParentElement, Styled, div, prelude::*, px};
 use crate::session::{ExecutionStep, SessionEvent, SessionState, StepStatus};
 use crate::ui::{components, input::ComposerInput, theme};
 
-pub fn render_execution(session: &SessionState, composer: Option<&Entity<ComposerInput>>) -> AnyElement {
+pub fn render_execution(
+    session: &SessionState,
+    composer: Option<&Entity<ComposerInput>>,
+) -> AnyElement {
     div()
         .size_full()
         .flex()

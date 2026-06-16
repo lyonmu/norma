@@ -4,12 +4,7 @@ use gpui::{
     App, AppContext, Context, Entity, IntoElement, ParentElement, Render, Styled, Window, div, px,
 };
 
-use crate::ui::{
-    components,
-    input::field::{InputChange, InputSubmit},
-    input::TextArea,
-    theme,
-};
+use crate::ui::{components, input::TextArea, input::field::InputSubmit, theme};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComposerState {
@@ -49,6 +44,7 @@ impl ComposerState {
     }
 }
 
+#[allow(dead_code)]
 pub struct ComposerInput {
     state: Arc<Mutex<ComposerState>>,
     text_area: Entity<TextArea>,

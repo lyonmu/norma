@@ -11,7 +11,11 @@ use crate::config::{
     AppConfig, ConfigError, NormaConfig, ProviderApiType, ProviderConfigStatus, SettingsSection,
     write_config,
 };
-use crate::ui::{components, theme, input::{SecureTextField, TextField}};
+use crate::ui::{
+    components,
+    input::{SecureTextField, TextField},
+    theme,
+};
 
 #[derive(Clone)]
 struct SettingsWindowState {
@@ -169,7 +173,7 @@ impl SettingsWindowState {
 impl Render for SettingsWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let config = self.state.lock().unwrap().config.clone();
-        
+
         // Update input entities when selected provider changes
         let selected_id = config.selected_provider_id.clone();
         if self.current_provider_id != selected_id {
@@ -236,7 +240,7 @@ impl Render for SettingsWindow {
                 ));
             }
         }
-        
+
         div()
             .size_full()
             .bg(theme::app_bg())
@@ -250,12 +254,14 @@ impl Render for SettingsWindow {
                     .flex_1()
                     .overflow_hidden()
                     .child(settings_navigation(config.active_settings_section))
-                    .child(
-                        div()
-                            .flex_1()
-                            .p_6()
-                            .child(settings_content(&self.state, &config, self.name_input.as_ref(), self.base_url_input.as_ref(), self.api_key_input.as_ref(), self.model_input.as_ref())),
-                    ),
+                    .child(div().flex_1().p_6().child(settings_content(
+                        &self.state,
+                        &config,
+                        self.name_input.as_ref(),
+                        self.base_url_input.as_ref(),
+                        self.api_key_input.as_ref(),
+                        self.model_input.as_ref(),
+                    ))),
             )
     }
 }
@@ -326,7 +332,14 @@ fn settings_content(
     model_input: Option<&Entity<TextField>>,
 ) -> AnyElement {
     match config.active_settings_section {
-        SettingsSection::AiProviders => ai_provider_pane(state, config, name_input, base_url_input, api_key_input, model_input),
+        SettingsSection::AiProviders => ai_provider_pane(
+            state,
+            config,
+            name_input,
+            base_url_input,
+            api_key_input,
+            model_input,
+        ),
         section => settings_placeholder(section),
     }
 }
@@ -378,7 +391,14 @@ fn ai_provider_pane(
                 .flex()
                 .gap_5()
                 .child(provider_list(state, config))
-                .child(provider_editor(state, config, name_input, base_url_input, api_key_input, model_input)),
+                .child(provider_editor(
+                    state,
+                    config,
+                    name_input,
+                    base_url_input,
+                    api_key_input,
+                    model_input,
+                )),
         )
         .child(
             div()

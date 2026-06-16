@@ -27,10 +27,7 @@ pub enum InputCommand {
     Blur,
 }
 
-pub fn key_to_command(
-    keystroke: &Keystroke,
-    context: KeyBindingContext,
-) -> Option<InputCommand> {
+pub fn key_to_command(keystroke: &Keystroke, context: KeyBindingContext) -> Option<InputCommand> {
     let modifiers = keystroke.modifiers;
     let secondary = modifiers.secondary();
     let shift = modifiers.shift;
@@ -74,7 +71,7 @@ pub fn key_to_command(
 #[cfg(test)]
 mod tests {
     use super::*;
-use gpui::Keystroke;
+    use gpui::{Keystroke, Modifiers};
 
     fn key(key: &str, key_char: Option<&str>, modifiers: Modifiers) -> Keystroke {
         Keystroke {
@@ -87,7 +84,10 @@ use gpui::Keystroke;
     #[test]
     fn maps_plain_character_to_insert_text() {
         assert_eq!(
-            key_to_command(&key("a", Some("a"), Modifiers::none()), KeyBindingContext::TextField),
+            key_to_command(
+                &key("a", Some("a"), Modifiers::none()),
+                KeyBindingContext::TextField
+            ),
             Some(InputCommand::InsertText("a".to_string()))
         );
     }
@@ -95,19 +95,29 @@ use gpui::Keystroke;
     #[test]
     fn maps_secondary_shortcuts() {
         assert_eq!(
-            key_to_command(&key("a", None, Modifiers::secondary_key()), KeyBindingContext::TextField),
+            key_to_command(
+                &key("a", None, Modifiers::secondary_key()),
+                KeyBindingContext::TextField
+            ),
             Some(InputCommand::SelectAll)
         );
         assert_eq!(
-            key_to_command(&key("z", None, Modifiers::secondary_key()), KeyBindingContext::TextField),
+            key_to_command(
+                &key("z", None, Modifiers::secondary_key()),
+                KeyBindingContext::TextField
+            ),
             Some(InputCommand::Undo)
         );
         assert_eq!(
             key_to_command(
-                &key("z", None, Modifiers {
-                    shift: true,
-                    ..Modifiers::secondary_key()
-                }),
+                &key(
+                    "z",
+                    None,
+                    Modifiers {
+                        shift: true,
+                        ..Modifiers::secondary_key()
+                    }
+                ),
                 KeyBindingContext::TextField
             ),
             Some(InputCommand::Redo)
@@ -117,15 +127,24 @@ use gpui::Keystroke;
     #[test]
     fn maps_delete_and_movement() {
         assert_eq!(
-            key_to_command(&key("backspace", None, Modifiers::none()), KeyBindingContext::TextField),
+            key_to_command(
+                &key("backspace", None, Modifiers::none()),
+                KeyBindingContext::TextField
+            ),
             Some(InputCommand::DeleteBackward)
         );
         assert_eq!(
-            key_to_command(&key("delete", None, Modifiers::none()), KeyBindingContext::TextField),
+            key_to_command(
+                &key("delete", None, Modifiers::none()),
+                KeyBindingContext::TextField
+            ),
             Some(InputCommand::DeleteForward)
         );
         assert_eq!(
-            key_to_command(&key("left", None, Modifiers::shift()), KeyBindingContext::TextField),
+            key_to_command(
+                &key("left", None, Modifiers::shift()),
+                KeyBindingContext::TextField
+            ),
             Some(InputCommand::MoveLeft { selecting: true })
         );
     }
@@ -133,11 +152,17 @@ use gpui::Keystroke;
     #[test]
     fn enter_submits_in_composer_and_shift_enter_inserts_newline() {
         assert_eq!(
-            key_to_command(&key("enter", None, Modifiers::none()), KeyBindingContext::Composer),
+            key_to_command(
+                &key("enter", None, Modifiers::none()),
+                KeyBindingContext::Composer
+            ),
             Some(InputCommand::Submit)
         );
         assert_eq!(
-            key_to_command(&key("enter", None, Modifiers::shift()), KeyBindingContext::Composer),
+            key_to_command(
+                &key("enter", None, Modifiers::shift()),
+                KeyBindingContext::Composer
+            ),
             Some(InputCommand::InsertNewline)
         );
     }
