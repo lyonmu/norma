@@ -40,6 +40,7 @@ pub struct TextArea {
     disabled: bool,
     read_only: bool,
     max_height: gpui::Pixels,
+    key_context: KeyBindingContext,
 }
 
 #[allow(dead_code)]
@@ -358,7 +359,33 @@ impl TextArea {
             disabled: false,
             read_only: false,
             max_height: px(160.),
+            key_context: KeyBindingContext::TextArea,
         })
+    }
+
+    pub fn new_with_context(
+        cx: &mut App,
+        placeholder: impl Into<String>,
+        initial: &str,
+        on_change: Option<InputChange>,
+        key_context: KeyBindingContext,
+    ) -> Entity<Self> {
+        cx.new(|cx| Self {
+            buffer: TextBuffer::new(InputMode::MultiLine, initial),
+            placeholder: placeholder.into(),
+            focus_handle: cx.focus_handle(),
+            on_change,
+            error_text: None,
+            disabled: false,
+            read_only: false,
+            max_height: px(160.),
+            key_context,
+        })
+    }
+
+    pub fn set_content(&mut self, content: String, cx: &mut Context<Self>) {
+        self.buffer.set_text(content);
+        cx.notify();
     }
 }
 
@@ -402,7 +429,7 @@ impl Render for TextArea {
             .cursor(CursorStyle::IBeam)
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
-                let Some(command) = key_to_command(&event.keystroke, KeyBindingContext::TextArea)
+                let Some(command) = key_to_command(&event.keystroke, this.key_context)
                 else {
                     return;
                 };

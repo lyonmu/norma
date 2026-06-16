@@ -1,10 +1,15 @@
 use std::sync::{Arc, Mutex};
 
 use gpui::{
-    App, AppContext, Context, Entity, IntoElement, ParentElement, Render, Styled, Window, div, px,
+    App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent, ParentElement,
+    Render, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
 
-use crate::ui::{components, input::TextArea, input::field::InputSubmit, theme};
+use crate::ui::{
+    components,
+    input::{InputCommand, KeyBindingContext, TextArea, field::InputSubmit, key_to_command},
+    theme,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComposerState {
@@ -40,7 +45,33 @@ impl ComposerState {
         if trimmed.is_empty() {
             return None;
         }
-        Some(trimmed.to_string())
+        let submitted = trimmed.to_string();
+        self.text.clear();
+        Some(submitted)
+    }
+}
+
+pub fn handle_composer_command(
+    state: &mut ComposerState,
+    command: InputCommand,
+    on_submit: Option<&InputSubmit>,
+) -> bool {
+    match command {
+        InputCommand::Submit => {
+            if let Some(content) = state.submit() {
+                if let Some(on_submit) = on_submit {
+                    on_submit(content);
+                }
+                true
+            } else {
+                false
+            }
+        }
+        InputCommand::InsertNewline => {
+            state.set_text(format!("{}\n", state.text()));
+            true
+        }
+        _ => false,
     }
 }
 
@@ -56,13 +87,14 @@ impl ComposerInput {
         cx.new(|cx| {
             let state = Arc::new(Mutex::new(ComposerState::new("")));
             let callback_state = Arc::clone(&state);
-            let text_area = TextArea::new(
+            let text_area = TextArea::new_with_context(
                 cx,
                 "描述你的下一步需求...",
                 "",
                 Some(Box::new(move |content| {
                     callback_state.lock().unwrap().set_text(content);
                 })),
+                KeyBindingContext::Composer,
             );
             Self {
                 state,
@@ -71,10 +103,36 @@ impl ComposerInput {
             }
         })
     }
+
+    fn apply_command(&mut self, command: InputCommand, cx: &mut Context<Self>) {
+        let changed = {
+            let mut state = self.state.lock().unwrap();
+            handle_composer_command(&mut state, command, self.on_submit.as_ref())
+        };
+        if changed {
+            let text = self.state.lock().unwrap().text().to_string();
+            self.text_area.update(cx, |text_area, cx| {
+                text_area.set_content(text, cx);
+            });
+        }
+        cx.notify();
+    }
+
+    fn handle_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(command) = key_to_command(&event.keystroke, KeyBindingContext::Composer) else {
+            return;
+        };
+        self.apply_command(command, cx);
+    }
 }
 
 impl Render for ComposerInput {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .mt_auto()
             .rounded(px(12.))
@@ -85,6 +143,7 @@ impl Render for ComposerInput {
             .flex()
             .flex_col()
             .gap_3()
+            .on_key_down(cx.listener(Self::handle_key_down))
             .child(self.text_area.clone())
             .child(
                 div()
@@ -102,7 +161,14 @@ impl Render for ComposerInput {
                             .flex()
                             .gap_2()
                             .child(components::pill("自动执行", false))
-                            .child(components::icon_button("↵")),
+                            .child(
+                                div()
+                                    .id(SharedString::from("composer-send"))
+                                    .child(components::icon_button("↵"))
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.apply_command(InputCommand::Submit, cx);
+                                    })),
+                            ),
                     ),
             )
     }
@@ -110,7 +176,10 @@ impl Render for ComposerInput {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use super::*;
+    use crate::ui::input::InputCommand;
 
     #[test]
     fn empty_content_cannot_submit() {
@@ -118,18 +187,49 @@ mod tests {
     }
 
     #[test]
-    fn submit_returns_trimmed_content_without_clearing_on_failure_boundary() {
+    fn successful_submit_returns_trimmed_content_and_clears_text() {
         let mut state = ComposerState::new(" summarize project ");
 
         assert_eq!(state.submit(), Some("summarize project".to_string()));
-        assert_eq!(state.text(), " summarize project ");
+        assert_eq!(state.text(), "");
     }
 
     #[test]
-    fn sending_state_blocks_submit() {
+    fn sending_state_blocks_submit_without_clearing() {
         let mut state = ComposerState::new("summarize project");
         state.set_sending(true);
 
         assert_eq!(state.submit(), None);
+        assert_eq!(state.text(), "summarize project");
+    }
+
+    #[test]
+    fn submit_command_invokes_callback_once() {
+        let submitted = Arc::new(Mutex::new(Vec::new()));
+        let submitted_callback = Arc::clone(&submitted);
+        let mut state = ComposerState::new(" run tests ");
+
+        let callback: InputSubmit = Box::new(move |content| {
+            submitted_callback.lock().unwrap().push(content);
+        });
+        handle_composer_command(&mut state, InputCommand::Submit, Some(&callback));
+
+        assert_eq!(submitted.lock().unwrap().as_slice(), ["run tests"]);
+        assert_eq!(state.text(), "");
+    }
+
+    #[test]
+    fn shift_enter_command_inserts_newline_without_submit() {
+        let submitted = Arc::new(Mutex::new(Vec::new()));
+        let submitted_callback = Arc::clone(&submitted);
+        let mut state = ComposerState::new("hello");
+
+        let callback: InputSubmit = Box::new(move |content| {
+            submitted_callback.lock().unwrap().push(content);
+        });
+        handle_composer_command(&mut state, InputCommand::InsertNewline, Some(&callback));
+
+        assert_eq!(state.text(), "hello\n");
+        assert!(submitted.lock().unwrap().is_empty());
     }
 }
