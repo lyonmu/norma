@@ -242,6 +242,53 @@ impl TextBuffer {
         self.text = snapshot.text;
         self.selection = self.clamp_selection(snapshot.selection);
     }
+
+    pub fn set_text(&mut self, text: impl Into<String>) {
+        self.text = text.into();
+        self.selection = Selection::caret(self.text.len());
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+    }
+
+    pub fn apply_command(&mut self, command: crate::ui::input::InputCommand) -> Result<EditOutcome, TextEditError> {
+        match command {
+            crate::ui::input::InputCommand::InsertText(text) => self.insert_text(&text),
+            crate::ui::input::InputCommand::InsertNewline => self.insert_text("\n"),
+            crate::ui::input::InputCommand::DeleteBackward => Ok(self.delete_backward()),
+            crate::ui::input::InputCommand::DeleteForward => Ok(self.delete_forward()),
+            crate::ui::input::InputCommand::MoveLeft { selecting } => {
+                self.move_left(selecting);
+                Ok(EditOutcome { changed: false })
+            }
+            crate::ui::input::InputCommand::MoveRight { selecting } => {
+                self.move_right(selecting);
+                Ok(EditOutcome { changed: false })
+            }
+            crate::ui::input::InputCommand::MoveToStart { selecting } => {
+                self.move_to_start(selecting);
+                Ok(EditOutcome { changed: false })
+            }
+            crate::ui::input::InputCommand::MoveToEnd { selecting } => {
+                self.move_to_end(selecting);
+                Ok(EditOutcome { changed: false })
+            }
+            crate::ui::input::InputCommand::SelectAll => {
+                self.select_all();
+                Ok(EditOutcome { changed: false })
+            }
+            crate::ui::input::InputCommand::Undo => Ok(EditOutcome {
+                changed: self.undo(),
+            }),
+            crate::ui::input::InputCommand::Redo => Ok(EditOutcome {
+                changed: self.redo(),
+            }),
+            crate::ui::input::InputCommand::Copy
+            | crate::ui::input::InputCommand::Cut
+            | crate::ui::input::InputCommand::Paste
+            | crate::ui::input::InputCommand::Submit
+            | crate::ui::input::InputCommand::Blur => Ok(EditOutcome { changed: false }),
+        }
+    }
 }
 
 fn mask_secret(text: &str) -> String {
