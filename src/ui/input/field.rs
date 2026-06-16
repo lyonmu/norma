@@ -429,8 +429,7 @@ impl Render for TextArea {
             .cursor(CursorStyle::IBeam)
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
-                let Some(command) = key_to_command(&event.keystroke, this.key_context)
-                else {
+                let Some(command) = key_to_command(&event.keystroke, this.key_context) else {
                     return;
                 };
                 if this.disabled || this.read_only {
@@ -482,7 +481,11 @@ impl Render for TextArea {
                     this.focus_handle.focus(window);
                 }),
             )
-            .child(render_segments(segments, self.placeholder.clone(), is_empty))
+            .child(render_segments(
+                segments,
+                self.placeholder.clone(),
+                is_empty,
+            ))
     }
 }
 
@@ -501,9 +504,7 @@ fn render_segments(segments: Vec<DisplaySegment>, placeholder: String, empty: bo
                     .text_color(theme::text())
                     .child(text),
             ),
-            DisplaySegment::Caret => {
-                row.child(div().w(px(1.)).h(px(18.)).bg(theme::blue()))
-            }
+            DisplaySegment::Caret => row.child(div().w(px(1.)).h(px(18.)).bg(theme::blue())),
         };
     }
     row

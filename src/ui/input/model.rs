@@ -306,7 +306,9 @@ impl TextBuffer {
         if start > 0 {
             segments.push(DisplaySegment::Text(display_text[..start].to_string()));
         }
-        segments.push(DisplaySegment::Selection(display_text[start..end].to_string()));
+        segments.push(DisplaySegment::Selection(
+            display_text[start..end].to_string(),
+        ));
         if end < display_text.len() {
             segments.push(DisplaySegment::Text(display_text[end..].to_string()));
         }

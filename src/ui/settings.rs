@@ -846,10 +846,8 @@ mod tests {
     fn save_action_writes_edited_base_url_to_runtime_config() {
         let runtime_config = sample_runtime_config();
         let mut config = AppConfig::from_norma_config(&runtime_config);
-        config
-            .selected_provider_mut()
-            .unwrap()
-            .base_url = "https://proxy.example.com/v1".to_string();
+        config.selected_provider_mut().unwrap().base_url =
+            "https://proxy.example.com/v1".to_string();
         config.selected_provider_mut().unwrap().mark_tested();
         let state = SettingsWindowState {
             config,
@@ -875,10 +873,7 @@ mod tests {
     fn save_action_writes_edited_api_key_to_runtime_config() {
         let runtime_config = sample_runtime_config();
         let mut config = AppConfig::from_norma_config(&runtime_config);
-        config
-            .selected_provider_mut()
-            .unwrap()
-            .api_key_reference = "sk-new-secret".to_string();
+        config.selected_provider_mut().unwrap().api_key_reference = "sk-new-secret".to_string();
         config.selected_provider_mut().unwrap().mark_tested();
         let state = SettingsWindowState {
             config,
@@ -894,6 +889,9 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(saved_config.unwrap().ai.providers[0].api_key, "sk-new-secret");
+        assert_eq!(
+            saved_config.unwrap().ai.providers[0].api_key,
+            "sk-new-secret"
+        );
     }
 }
