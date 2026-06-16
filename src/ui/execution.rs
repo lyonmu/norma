@@ -1,9 +1,9 @@
-use gpui::{AnyElement, ParentElement, Styled, div, prelude::*, px};
+use gpui::{AnyElement, Entity, ParentElement, Styled, div, prelude::*, px};
 
 use crate::session::{ExecutionStep, SessionEvent, SessionState, StepStatus};
-use crate::ui::{components, theme};
+use crate::ui::{components, input::ComposerInput, theme};
 
-pub fn render_execution(session: &SessionState) -> AnyElement {
+pub fn render_execution(session: &SessionState, composer: Option<&Entity<ComposerInput>>) -> AnyElement {
     div()
         .size_full()
         .flex()
@@ -21,7 +21,7 @@ pub fn render_execution(session: &SessionState) -> AnyElement {
                 .pl_4()
                 .children(session.events.iter().filter_map(render_event)),
         )
-        .child(composer())
+        .children(composer.cloned())
         .into_any_element()
 }
 
@@ -177,38 +177,4 @@ fn status_icon(status: &StepStatus) -> &'static str {
         StepStatus::Waiting => "○",
         StepStatus::Failed => "!",
     }
-}
-
-fn composer() -> AnyElement {
-    div()
-        .mt_auto()
-        .rounded(px(12.))
-        .border_1()
-        .border_color(theme::border())
-        .bg(theme::surface())
-        .p_4()
-        .flex()
-        .flex_col()
-        .gap_3()
-        .child(components::label("描述你的下一步需求..."))
-        .child(
-            div()
-                .flex()
-                .justify_between()
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(components::pill("添加上下文", false))
-                        .child(components::pill("使用工具", false)),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(components::pill("自动执行", false))
-                        .child(components::icon_button("↵")),
-                ),
-        )
-        .into_any_element()
 }

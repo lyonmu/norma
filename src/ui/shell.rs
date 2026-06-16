@@ -1,30 +1,49 @@
 use std::sync::mpsc::Receiver;
 
 use gpui::{
-    App, Application, Bounds, Context, IntoElement, ParentElement, Render, SharedString, Styled,
-    Window, WindowBounds, WindowOptions, div, point, prelude::*, px, size,
+    App, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render, SharedString,
+    Styled, Window, WindowBounds, WindowOptions, div, point, prelude::*, px, size,
 };
 
 use crate::app::NormaAppState;
 use crate::runtime::RuntimeUpdate;
-use crate::ui::{components, execution, inspector, settings::SettingsWindow, sidebar, theme};
+use crate::ui::{components, execution, input::ComposerInput, inspector, settings::SettingsWindow, sidebar, theme};
 
 pub struct AppShell {
     state: NormaAppState,
     updates: Receiver<RuntimeUpdate>,
+    composer_input: Option<Entity<ComposerInput>>,
 }
 
 impl AppShell {
     pub fn new(state: NormaAppState, updates: Receiver<RuntimeUpdate>) -> Self {
-        Self { state, updates }
+        Self {
+            state,
+            updates,
+            composer_input: None,
+        }
     }
 }
 
 impl Render for AppShell {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         while let Ok(update) = self.updates.try_recv() {
             self.state.apply_runtime_update(update);
         }
+
+        if self.composer_input.is_none() {
+            self.composer_input = Some(ComposerInput::new(
+                cx,
+                Some(Box::new(|content| {
+                    tracing::info!(
+                        component = "composer",
+                        prompt_len = content.chars().count(),
+                        "composer submit captured"
+                    );
+                })),
+            ));
+        }
+
         div()
             .size_full()
             .bg(theme::app_bg())
@@ -50,7 +69,7 @@ impl Render for AppShell {
                             .flex_1()
                             .h_full()
                             .p_6()
-                            .child(execution::render_execution(&self.state.session)),
+                            .child(execution::render_execution(&self.state.session, self.composer_input.as_ref())),
                     )
                     .child(
                         div()
