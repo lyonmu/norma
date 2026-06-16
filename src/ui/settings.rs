@@ -165,8 +165,41 @@ impl SettingsWindowState {
         let Some(config) = self.persisted_config.as_ref() else {
             return Err("缺少可写入的配置".to_string());
         };
+        let mut next_config = config.clone();
+        let next_provider = crate::config::AiProviderConfig {
+            id: provider.id.clone(),
+            name: provider.name.clone(),
+            api_type: match provider.protocol {
+                crate::config::ProviderProtocol::OpenAi => ProviderApiType::OpenAi,
+                crate::config::ProviderProtocol::Anthropic => ProviderApiType::Anthropic,
+            },
+            base_url: provider.base_url.clone(),
+            api_key: provider.api_key_reference.clone(),
+            is_default: provider.is_default,
+            models: provider
+                .models
+                .iter()
+                .map(|model| crate::config::AiModelConfig {
+                    id: model.id.clone(),
+                    name: model.name.clone(),
+                    model_id: model.model_id.clone(),
+                    is_default: model.is_default,
+                })
+                .collect(),
+        };
 
-        write(path, config).map_err(|error| error.to_string())
+        if let Some(existing) = next_config
+            .ai
+            .providers
+            .iter_mut()
+            .find(|candidate| candidate.id == next_provider.id)
+        {
+            *existing = next_provider;
+        } else {
+            next_config.ai.providers.push(next_provider);
+        }
+
+        write(path, &next_config).map_err(|error| error.to_string())
     }
 }
 
@@ -807,5 +840,60 @@ mod tests {
             .unwrap_err();
 
         assert!(err.contains("测试当前候选"));
+    }
+
+    #[test]
+    fn save_action_writes_edited_base_url_to_runtime_config() {
+        let runtime_config = sample_runtime_config();
+        let mut config = AppConfig::from_norma_config(&runtime_config);
+        config
+            .selected_provider_mut()
+            .unwrap()
+            .base_url = "https://proxy.example.com/v1".to_string();
+        config.selected_provider_mut().unwrap().mark_tested();
+        let state = SettingsWindowState {
+            config,
+            persisted_config: Some(runtime_config),
+            config_file: Some(std::env::temp_dir().join("norma-settings-test.toml")),
+        };
+
+        let mut saved_config = None;
+        state
+            .save_selected_provider(|_, config| {
+                saved_config = Some(config.clone());
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(
+            saved_config.unwrap().ai.providers[0].base_url,
+            "https://proxy.example.com/v1"
+        );
+    }
+
+    #[test]
+    fn save_action_writes_edited_api_key_to_runtime_config() {
+        let runtime_config = sample_runtime_config();
+        let mut config = AppConfig::from_norma_config(&runtime_config);
+        config
+            .selected_provider_mut()
+            .unwrap()
+            .api_key_reference = "sk-new-secret".to_string();
+        config.selected_provider_mut().unwrap().mark_tested();
+        let state = SettingsWindowState {
+            config,
+            persisted_config: Some(runtime_config),
+            config_file: Some(std::env::temp_dir().join("norma-settings-test.toml")),
+        };
+
+        let mut saved_config = None;
+        state
+            .save_selected_provider(|_, config| {
+                saved_config = Some(config.clone());
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(saved_config.unwrap().ai.providers[0].api_key, "sk-new-secret");
     }
 }
