@@ -10,6 +10,13 @@ pub enum DisplayMode {
     Secure,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DisplaySegment {
+    Text(String),
+    Selection(String),
+    Caret,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TextEditError {
     NewlineRejected,
@@ -250,6 +257,62 @@ impl TextBuffer {
         self.redo_stack.clear();
     }
 
+    pub fn cut_selection(&mut self) -> Option<String> {
+        if self.selection.is_caret() {
+            return None;
+        }
+        let selected = self.selected_text().to_string();
+        self.push_undo();
+        self.replace_selection_raw("");
+        self.redo_stack.clear();
+        Some(selected)
+    }
+
+    pub fn paste_text(&mut self, text: &str) -> Result<EditOutcome, TextEditError> {
+        self.insert_text(text)
+    }
+
+    pub fn clear(&mut self) {
+        self.push_undo();
+        self.text.clear();
+        self.selection = Selection::caret(0);
+        self.redo_stack.clear();
+    }
+
+    pub fn display_segments(&self, mode: DisplayMode, focused: bool) -> Vec<DisplaySegment> {
+        let display_text = self.display_text(mode);
+        let selection = self.selection.ordered();
+        if !focused {
+            return vec![DisplaySegment::Text(display_text)];
+        }
+
+        if self.selection.is_caret() {
+            let caret =
+                display_offset_for_raw_offset(&self.text, self.selection.head, &display_text);
+            let mut segments = Vec::new();
+            if caret > 0 {
+                segments.push(DisplaySegment::Text(display_text[..caret].to_string()));
+            }
+            segments.push(DisplaySegment::Caret);
+            if caret < display_text.len() {
+                segments.push(DisplaySegment::Text(display_text[caret..].to_string()));
+            }
+            return segments;
+        }
+
+        let start = display_offset_for_raw_offset(&self.text, selection.start, &display_text);
+        let end = display_offset_for_raw_offset(&self.text, selection.end, &display_text);
+        let mut segments = Vec::new();
+        if start > 0 {
+            segments.push(DisplaySegment::Text(display_text[..start].to_string()));
+        }
+        segments.push(DisplaySegment::Selection(display_text[start..end].to_string()));
+        if end < display_text.len() {
+            segments.push(DisplaySegment::Text(display_text[end..].to_string()));
+        }
+        segments
+    }
+
     pub fn apply_command(
         &mut self,
         command: crate::ui::input::InputCommand,
@@ -308,6 +371,15 @@ fn mask_secret(text: &str) -> String {
         .rev()
         .collect();
     format!("{}{}", "•".repeat(char_count.saturating_sub(4)), suffix)
+}
+
+fn display_offset_for_raw_offset(raw: &str, raw_offset: usize, display: &str) -> usize {
+    let char_offset = raw[..raw_offset].chars().count();
+    display
+        .char_indices()
+        .nth(char_offset)
+        .map(|(idx, _)| idx)
+        .unwrap_or(display.len())
 }
 
 fn previous_char_boundary(text: &str, offset: usize) -> Option<usize> {
@@ -424,5 +496,94 @@ mod tests {
         assert_eq!(buffer.display_text(DisplayMode::Secure), "••••••••••cret");
         assert_eq!(buffer.text(), "sk-test-secret");
         assert_eq!(buffer.display_text(DisplayMode::Plain), "sk-test-secret");
+    }
+
+    #[test]
+    fn cut_selection_returns_text_and_removes_selection() {
+        let mut buffer = TextBuffer::new(InputMode::MultiLine, "hello\nworld");
+        buffer.set_selection(Selection::range(6, 11));
+
+        let cut = buffer.cut_selection();
+
+        assert_eq!(cut, Some("world".to_string()));
+        assert_eq!(buffer.text(), "hello\n");
+        assert_eq!(buffer.selection(), Selection::caret(6));
+
+        assert!(buffer.undo());
+        assert_eq!(buffer.text(), "hello\nworld");
+    }
+
+    #[test]
+    fn paste_text_inserts_multiline_text_at_caret() {
+        let mut buffer = TextBuffer::new(InputMode::MultiLine, "hello");
+
+        buffer.move_to_end(false);
+        buffer.paste_text("\nworld").unwrap();
+
+        assert_eq!(buffer.text(), "hello\nworld");
+        assert_eq!(buffer.selection(), Selection::caret(11));
+    }
+
+    #[test]
+    fn display_segments_show_caret_in_middle() {
+        let mut buffer = TextBuffer::new(InputMode::SingleLine, "hello");
+        buffer.move_to_start(false);
+        buffer.move_right(false);
+        buffer.move_right(false);
+
+        assert_eq!(
+            buffer.display_segments(DisplayMode::Plain, true),
+            vec![
+                DisplaySegment::Text("he".to_string()),
+                DisplaySegment::Caret,
+                DisplaySegment::Text("llo".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn display_segments_show_reversed_selection() {
+        let mut buffer = TextBuffer::new(InputMode::SingleLine, "hello");
+        buffer.set_selection(Selection::range(4, 1));
+
+        assert_eq!(
+            buffer.display_segments(DisplayMode::Plain, true),
+            vec![
+                DisplaySegment::Text("h".to_string()),
+                DisplaySegment::Selection("ell".to_string()),
+                DisplaySegment::Text("o".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn secure_display_segments_do_not_expose_raw_secret() {
+        let mut buffer = TextBuffer::new(InputMode::SingleLine, "sk-test-secret");
+        buffer.set_selection(Selection::range(0, 2));
+
+        let segments = buffer.display_segments(DisplayMode::Secure, true);
+
+        assert_eq!(
+            segments,
+            vec![
+                DisplaySegment::Selection("••".to_string()),
+                DisplaySegment::Text("••••••••cret".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn display_segments_respect_chinese_character_boundaries() {
+        let mut buffer = TextBuffer::new(InputMode::SingleLine, "你好world");
+        buffer.set_selection(Selection::range("你".len(), "你好".len()));
+
+        assert_eq!(
+            buffer.display_segments(DisplayMode::Plain, true),
+            vec![
+                DisplaySegment::Text("你".to_string()),
+                DisplaySegment::Selection("好".to_string()),
+                DisplaySegment::Text("world".to_string()),
+            ]
+        );
     }
 }
