@@ -3,7 +3,6 @@
 .agents/
 .codegraph/
 .comet/
-docs/
 openspec/
 opencode.jsonc
 skills-lock.json
