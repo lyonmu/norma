@@ -38,7 +38,11 @@ Compare against `docs/superpowers/specs/assets/norma-review-first-codex-workbenc
 - [ ] Step checklist items shown with status icons
 - [ ] Timeline line (left border) connecting events
 - [ ] Message cards for final response (green border) and errors (red border)
-- [ ] Composer at bottom with placeholder text and action pills
+- [ ] Composer at bottom has a real multi-line text input with placeholder text and action pills.
+- [ ] Composer supports focused, typing, multi-line, and sending/locked visual states.
+- [ ] Enter submits composer content; Shift+Enter inserts a newline.
+- [ ] Empty composer content cannot submit.
+- [ ] Composer text does not overlap footer actions or resize the center pane unexpectedly.
 
 ## Right Inspector (410px)
 

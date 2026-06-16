@@ -31,3 +31,15 @@ Use this checklist when verifying `docs/superpowers/specs/2026-06-11-norma-ai-pr
 - [ ] `测试连接` invokes the configured provider test path and reports a tested state without exposing the API key.
 - [ ] The pane includes `测试通过后才能保存配置。配置会写入本机 ~/.norma/config.toml。`.
 - [ ] No real API key, account UI, avatar, billing, MCP, Skills, automation, or tool-calling controls are visible.
+
+## Text Input States
+
+- [ ] Provider name, Base URL, API Key, and model fields use one consistent input style.
+- [ ] Focused input shows a blue border or subtle focus ring without changing layout size.
+- [ ] API Key is masked by default and has a compact show/hide affordance.
+- [ ] Long Base URL and model values remain inside the input bounds.
+- [ ] Editing a provider field invalidates the previous tested state and disables saving until the candidate is tested again.
+- [ ] Error text appears below the relevant field and does not overlap adjacent controls.
+- [ ] Disabled or read-only inputs use muted text and a light tinted background.
+- [ ] Chinese IME input enters committed Chinese text without duplicate or broken characters.
+- [ ] Copy, paste, undo, redo, and select-all work in focused inputs.
