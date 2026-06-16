@@ -1,5 +1,6 @@
 pub mod components;
 pub mod execution;
+pub mod input;
 pub mod inspector;
 pub mod settings;
 pub mod shell;
