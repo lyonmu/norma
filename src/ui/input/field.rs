@@ -5,7 +5,10 @@ use gpui::{
 };
 
 use crate::ui::{
-    input::{DisplayMode, InputCommand, InputMode, KeyBindingContext, TextBuffer, key_to_command},
+    input::{
+        DisplayMode, DisplaySegment, InputCommand, InputMode, KeyBindingContext, TextBuffer,
+        key_to_command,
+    },
     theme,
 };
 
@@ -116,26 +119,42 @@ impl TextField {
                 }
             }
             InputCommand::Blur => window.blur(),
-            InputCommand::Copy => cx.write_to_clipboard(gpui::ClipboardItem::new_string(
-                self.buffer.selected_text().to_string(),
-            )),
-            InputCommand::Cut if !self.read_only => {
+            command => {
+                self.apply_editing_command(command, cx);
+            }
+        }
+        cx.notify();
+    }
+
+    fn apply_editing_command(&mut self, command: InputCommand, cx: &mut Context<Self>) -> bool {
+        match command {
+            InputCommand::Copy => {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(
                     self.buffer.selected_text().to_string(),
                 ));
-                if self.buffer.delete_backward().changed {
+                false
+            }
+            InputCommand::Cut if !self.read_only => {
+                if let Some(text) = self.buffer.cut_selection() {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
                     self.emit_change();
+                    true
+                } else {
+                    false
                 }
             }
             InputCommand::Paste if !self.read_only => {
                 if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text())
                     && self
                         .buffer
-                        .insert_text(&text)
+                        .paste_text(&text)
                         .map(|outcome| outcome.changed)
                         .unwrap_or(false)
                 {
                     self.emit_change();
+                    true
+                } else {
+                    false
                 }
             }
             command if !self.read_only => {
@@ -146,11 +165,13 @@ impl TextField {
                     .unwrap_or(false)
                 {
                     self.emit_change();
+                    true
+                } else {
+                    false
                 }
             }
-            _ => {}
+            _ => false,
         }
-        cx.notify();
     }
 
     fn emit_change(&self) {
@@ -177,12 +198,13 @@ impl Focusable for TextField {
 
 impl Render for TextField {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let focused = self.focus_handle.is_focused(window);
         render_input_shell(
-            self.focus_handle.is_focused(window),
+            focused,
             self.disabled,
             self.error_text.is_some(),
             self.buffer.text().is_empty(),
-            self.buffer.display_text(DisplayMode::Plain),
+            self.buffer.display_segments(DisplayMode::Plain, focused),
             self.placeholder.clone(),
         )
         .track_focus(&self.focus_handle)
@@ -228,12 +250,13 @@ impl Render for SecureTextField {
             DisplayMode::Secure
         };
         let label = if self.reveal { "隐藏" } else { "显示" };
+        let focused = self.field.focus_handle.is_focused(window);
         render_input_shell(
-            self.field.focus_handle.is_focused(window),
+            focused,
             self.field.disabled,
             self.field.error_text.is_some(),
             self.field.buffer.text().is_empty(),
-            self.field.buffer.display_text(display_mode),
+            self.field.buffer.display_segments(display_mode, focused),
             self.field.placeholder.clone(),
         )
         .track_focus(&self.field.focus_handle)
@@ -258,13 +281,11 @@ impl Render for SecureTextField {
                     this.field.buffer.selected_text().to_string(),
                 )),
                 InputCommand::Cut if !this.field.read_only => {
-                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(
-                        this.field.buffer.selected_text().to_string(),
-                    ));
-                    if this.field.buffer.delete_backward().changed
-                        && let Some(on_change) = &this.field.on_change
-                    {
-                        on_change(this.field.buffer.text().to_string());
+                    if let Some(text) = this.field.buffer.cut_selection() {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                        if let Some(on_change) = &this.field.on_change {
+                            on_change(this.field.buffer.text().to_string());
+                        }
                     }
                 }
                 InputCommand::Paste if !this.field.read_only => {
@@ -272,7 +293,7 @@ impl Render for SecureTextField {
                         && this
                             .field
                             .buffer
-                            .insert_text(&text)
+                            .paste_text(&text)
                             .map(|outcome| outcome.changed)
                             .unwrap_or(false)
                         && let Some(on_change) = &this.field.on_change
@@ -350,18 +371,15 @@ impl Focusable for TextArea {
 impl Render for TextArea {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let is_empty = self.buffer.text().is_empty();
-        let text = if is_empty {
-            self.placeholder.clone()
-        } else {
-            self.buffer.text().to_string()
-        };
+        let focused = self.focus_handle.is_focused(window);
+        let segments = self.buffer.display_segments(DisplayMode::Plain, focused);
         div()
             .min_h(px(86.))
             .max_h(self.max_height)
             .overflow_hidden()
             .rounded(px(8.))
             .border_1()
-            .border_color(if self.focus_handle.is_focused(window) {
+            .border_color(if focused {
                 theme::blue()
             } else if self.error_text.is_some() {
                 theme::red()
@@ -391,14 +409,43 @@ impl Render for TextArea {
                 if this.disabled || this.read_only {
                     return;
                 }
-                if this
-                    .buffer
-                    .apply_command(command)
-                    .map(|outcome| outcome.changed)
-                    .unwrap_or(false)
-                    && let Some(on_change) = &this.on_change
-                {
-                    on_change(this.buffer.text().to_string());
+                match command {
+                    InputCommand::Copy => {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                            this.buffer.selected_text().to_string(),
+                        ));
+                    }
+                    InputCommand::Cut => {
+                        if let Some(text) = this.buffer.cut_selection() {
+                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                            if let Some(on_change) = &this.on_change {
+                                on_change(this.buffer.text().to_string());
+                            }
+                        }
+                    }
+                    InputCommand::Paste => {
+                        if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text())
+                            && this
+                                .buffer
+                                .paste_text(&text)
+                                .map(|outcome| outcome.changed)
+                                .unwrap_or(false)
+                            && let Some(on_change) = &this.on_change
+                        {
+                            on_change(this.buffer.text().to_string());
+                        }
+                    }
+                    command => {
+                        if this
+                            .buffer
+                            .apply_command(command)
+                            .map(|outcome| outcome.changed)
+                            .unwrap_or(false)
+                            && let Some(on_change) = &this.on_change
+                        {
+                            on_change(this.buffer.text().to_string());
+                        }
+                    }
                 }
                 cx.notify();
             }))
@@ -408,8 +455,31 @@ impl Render for TextArea {
                     this.focus_handle.focus(window);
                 }),
             )
-            .child(text)
+            .child(render_segments(segments, self.placeholder.clone(), is_empty))
     }
+}
+
+fn render_segments(segments: Vec<DisplaySegment>, placeholder: String, empty: bool) -> gpui::Div {
+    let mut row = div().flex().items_center();
+    if empty {
+        return row.text_color(theme::muted()).child(placeholder);
+    }
+    for segment in segments {
+        row = match segment {
+            DisplaySegment::Text(text) => row.child(div().child(text)),
+            DisplaySegment::Selection(text) => row.child(
+                div()
+                    .rounded(px(3.))
+                    .bg(theme::surface_tint())
+                    .text_color(theme::text())
+                    .child(text),
+            ),
+            DisplaySegment::Caret => {
+                row.child(div().w(px(1.)).h(px(18.)).bg(theme::blue()))
+            }
+        };
+    }
+    row
 }
 
 fn render_input_shell(
@@ -417,7 +487,7 @@ fn render_input_shell(
     disabled: bool,
     has_error: bool,
     empty: bool,
-    text: String,
+    segments: Vec<DisplaySegment>,
     placeholder: String,
 ) -> gpui::Div {
     div()
@@ -442,5 +512,5 @@ fn render_input_shell(
         .cursor(CursorStyle::IBeam)
         .text_size(px(14.))
         .text_color(if empty { theme::muted() } else { theme::text() })
-        .child(if empty { placeholder } else { text })
+        .child(render_segments(segments, placeholder, empty))
 }
