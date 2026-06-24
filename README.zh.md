@@ -1,5 +1,5 @@
 <p align="center">
-<img src="asset/img/icon.png" alt="icon" style="zoom:10%;"/>
+<img src="asset/img/norma.png" alt="icon" width="120"/>
 </p>
 
 <p align="center">基于 GPUI 构建的跨平台桌面 Agent</p>
