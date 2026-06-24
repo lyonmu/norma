@@ -80,24 +80,6 @@ Use rustfmt defaults. Name functions and modules in `snake_case`, types and trai
 
 V1 Git behavior is read-only. Do not add reset, checkout, discard, patch application, or destructive Git operations unless a newer spec explicitly changes the boundary and tests cover it.
 
-## Git Commit Convention
-
-Use Conventional Commits:
-
-```text
-<type>(optional scope): <summary>
-```
-
-Recommended types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `style`, `perf`.
-
-Examples:
-
-- `feat(agent): add subagent execution pipeline`
-- `refactor(logging): split tracing initialization into module`
-- `docs: update AGENTS.md for current project structure`
-
-Summaries must be short, clear English. Avoid vague messages such as `update` or `fix bug`. Keep each commit focused on one topic; do not mix unrelated docs, runtime, UI, and dependency changes.
-
 ## Files And Directories Requiring Care
 
 - `Cargo.toml` and `Cargo.lock`: keep dependency/package changes intentional and committed together.
