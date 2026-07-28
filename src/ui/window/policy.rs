@@ -108,14 +108,30 @@ mod tests {
 
     #[test]
     fn main_content_size_clamps_each_dimension_to_the_minimum() {
-        let config = WindowConfig {
+        let both_below_minimum = WindowConfig {
             width: 900,
+            height: 680,
+        };
+        let width_below_minimum = WindowConfig {
+            width: 900,
+            height: 900,
+        };
+        let height_below_minimum = WindowConfig {
+            width: 1200,
             height: 680,
         };
 
         assert_eq!(
-            WindowPolicy::main_content_size(Some(&config)),
+            WindowPolicy::main_content_size(Some(&both_below_minimum)),
             size(px(1024.), px(700.))
+        );
+        assert_eq!(
+            WindowPolicy::main_content_size(Some(&width_below_minimum)),
+            size(px(1024.), px(900.))
+        );
+        assert_eq!(
+            WindowPolicy::main_content_size(Some(&height_below_minimum)),
+            size(px(1200.), px(700.))
         );
     }
 
