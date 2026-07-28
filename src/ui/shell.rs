@@ -120,6 +120,7 @@ fn toolbar_action(
 ) -> AnyElement {
     div()
         .id(SharedString::from(id))
+        .debug_selector(|| id.to_string())
         .w(px(32.))
         .h(px(32.))
         .rounded(px(8.))
@@ -231,6 +232,7 @@ fn inspector_panel(state: &NormaAppState) -> AnyElement {
 fn sidebar_drawer(state: &NormaAppState) -> AnyElement {
     div()
         .id(SharedString::from("sidebar-drawer"))
+        .debug_selector(|| "sidebar-drawer".to_string())
         .absolute()
         .top(theme::TOOLBAR_HEIGHT)
         .bottom(px(0.))
@@ -246,6 +248,7 @@ fn sidebar_drawer(state: &NormaAppState) -> AnyElement {
 fn inspector_drawer(state: &NormaAppState) -> AnyElement {
     div()
         .id(SharedString::from("inspector-drawer"))
+        .debug_selector(|| "inspector-drawer".to_string())
         .absolute()
         .top(theme::TOOLBAR_HEIGHT)
         .bottom(px(0.))
@@ -294,7 +297,7 @@ fn settings_button(state: &NormaAppState) -> impl IntoElement {
 mod tests {
     use std::sync::mpsc;
 
-    use gpui::{AppContext, TestAppContext, size};
+    use gpui::{AppContext, Modifiers, TestAppContext, size};
 
     use super::*;
 
@@ -346,6 +349,52 @@ mod tests {
         assert_eq!(
             cx.read_entity(&shell, |shell, _| shell.last_size_class),
             Some(WindowSizeClass::Wide)
+        );
+    }
+
+    #[gpui::test]
+    fn compact_toolbar_toggles_drawers_and_keeps_them_mutually_exclusive(cx: &mut TestAppContext) {
+        let (_updates_tx, updates_rx) = mpsc::channel();
+        let (shell, cx) =
+            cx.add_window_view(|_, _| AppShell::new(NormaAppState::no_project(), updates_rx));
+
+        cx.simulate_resize(size(px(1024.), px(700.)));
+        cx.run_until_parked();
+
+        let sidebar_toggle_bounds = cx
+            .debug_bounds("toggle-sidebar")
+            .expect("compact sidebar toggle should have debug bounds");
+        cx.simulate_click(sidebar_toggle_bounds.center(), Modifiers::none());
+        cx.run_until_parked();
+
+        assert_eq!(
+            cx.read_entity(&shell, |shell, _| (
+                shell.sidebar_drawer_open,
+                shell.inspector_drawer_open
+            )),
+            (true, false)
+        );
+        assert!(
+            cx.debug_bounds("sidebar-drawer").is_some(),
+            "sidebar drawer should be rendered after clicking its toggle"
+        );
+
+        let inspector_toggle_bounds = cx
+            .debug_bounds("toggle-inspector")
+            .expect("compact inspector toggle should have debug bounds");
+        cx.simulate_click(inspector_toggle_bounds.center(), Modifiers::none());
+        cx.run_until_parked();
+
+        assert_eq!(
+            cx.read_entity(&shell, |shell, _| (
+                shell.sidebar_drawer_open,
+                shell.inspector_drawer_open
+            )),
+            (false, true)
+        );
+        assert!(
+            cx.debug_bounds("inspector-drawer").is_some(),
+            "inspector drawer should be rendered after clicking its toggle"
         );
     }
 }
