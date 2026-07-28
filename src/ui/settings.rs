@@ -579,6 +579,7 @@ fn provider_editor(
     let Some(provider) = config.selected_provider() else {
         return div()
             .flex_1()
+            .min_w(px(0.))
             .rounded(px(10.))
             .border_1()
             .border_color(theme::border())
@@ -590,6 +591,7 @@ fn provider_editor(
 
     div()
         .flex_1()
+        .min_w(px(0.))
         .rounded(px(10.))
         .border_1()
         .border_color(theme::border())
@@ -609,6 +611,8 @@ fn provider_editor(
             div()
                 .mt_2()
                 .flex()
+                .flex_wrap()
+                .gap_2()
                 .justify_between()
                 .items_center()
                 .child(
