@@ -1,4 +1,5 @@
 /target
+.worktrees/
 .superpowers/
 .agents/
 .codegraph/
