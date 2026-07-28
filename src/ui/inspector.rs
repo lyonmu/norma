@@ -1,4 +1,4 @@
-use gpui::{AnyElement, ParentElement, Styled, div, prelude::*, px};
+use gpui::{AnyElement, InteractiveElement, ParentElement, Styled, div, prelude::*, px};
 
 use crate::app::NormaAppState;
 use crate::session::InspectorTab;
@@ -18,6 +18,10 @@ pub fn render_inspector(state: &NormaAppState) -> AnyElement {
         .child(tabs(state.session.active_tab))
         .child(
             div()
+                .id("inspector-scroll")
+                .flex_1()
+                .min_h(px(0.))
+                .overflow_y_scroll()
                 .p_5()
                 .flex()
                 .flex_col()

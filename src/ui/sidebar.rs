@@ -1,4 +1,4 @@
-use gpui::{AnyElement, ParentElement, Styled, div, prelude::*, px};
+use gpui::{AnyElement, InteractiveElement, ParentElement, Styled, div, prelude::*, px};
 
 use crate::app::NormaAppState;
 use crate::ui::{components, theme};
@@ -7,6 +7,9 @@ use crate::workspace::FileKind;
 pub fn render_sidebar(state: &NormaAppState) -> AnyElement {
     div()
         .size_full()
+        .min_h(px(0.))
+        .id("sidebar-scroll")
+        .overflow_y_scroll()
         .bg(theme::surface())
         .p_4()
         .flex()

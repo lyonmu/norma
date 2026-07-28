@@ -294,6 +294,8 @@ fn settings_button(state: &NormaAppState) -> impl IntoElement {
 mod tests {
     use std::sync::mpsc;
 
+    use gpui::{AppContext, TestAppContext, size};
+
     use super::*;
 
     fn shell() -> AppShell {
@@ -324,5 +326,26 @@ mod tests {
         shell.apply_size_class(WindowSizeClass::Compact);
 
         assert!(shell.sidebar_drawer_open);
+    }
+
+    #[gpui::test]
+    fn resizing_the_window_recomputes_the_shell_size_class(cx: &mut TestAppContext) {
+        let (_updates_tx, updates_rx) = mpsc::channel();
+        let (shell, cx) =
+            cx.add_window_view(|_, _| AppShell::new(NormaAppState::no_project(), updates_rx));
+
+        cx.simulate_resize(size(px(1024.), px(700.)));
+        cx.run_until_parked();
+        assert_eq!(
+            cx.read_entity(&shell, |shell, _| shell.last_size_class),
+            Some(WindowSizeClass::Compact)
+        );
+
+        cx.simulate_resize(size(px(1280.), px(800.)));
+        cx.run_until_parked();
+        assert_eq!(
+            cx.read_entity(&shell, |shell, _| shell.last_size_class),
+            Some(WindowSizeClass::Wide)
+        );
     }
 }

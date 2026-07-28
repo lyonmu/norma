@@ -1,4 +1,4 @@
-use gpui::{AnyElement, Entity, ParentElement, Styled, div, prelude::*, px};
+use gpui::{AnyElement, Entity, InteractiveElement, ParentElement, Styled, div, prelude::*, px};
 
 use crate::session::{ExecutionStep, SessionEvent, SessionState, StepStatus};
 use crate::ui::{components, input::ComposerInput, theme};
@@ -9,6 +9,7 @@ pub fn render_execution(
 ) -> AnyElement {
     div()
         .size_full()
+        .min_h(px(0.))
         .flex()
         .flex_col()
         .gap_4()
@@ -16,13 +17,20 @@ pub fn render_execution(
         .child(task_summary(session))
         .child(
             div()
-                .flex()
-                .flex_col()
-                .gap_3()
-                .border_l_1()
-                .border_color(theme::border())
-                .pl_4()
-                .children(session.events.iter().filter_map(render_event)),
+                .id("execution-scroll")
+                .flex_1()
+                .min_h(px(0.))
+                .overflow_y_scroll()
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_3()
+                        .border_l_1()
+                        .border_color(theme::border())
+                        .pl_4()
+                        .children(session.events.iter().filter_map(render_event)),
+                ),
         )
         .children(composer.cloned())
         .into_any_element()
