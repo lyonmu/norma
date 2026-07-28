@@ -251,6 +251,20 @@ mod tests {
     }
 
     #[test]
+    fn settings_minimum_width_uses_stacked_layout() {
+        let options = WindowPolicy::settings_window_options();
+        let minimum_size = options
+            .window_min_size
+            .expect("settings window should define a minimum size");
+
+        assert_eq!(minimum_size.width, px(840.));
+        assert_eq!(
+            WindowPolicy::settings_size_class(minimum_size.width),
+            SettingsSizeClass::Stacked
+        );
+    }
+
+    #[test]
     fn settings_options_keep_the_expected_initial_size() {
         let options = WindowPolicy::settings_window_options();
 

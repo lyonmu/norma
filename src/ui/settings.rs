@@ -15,6 +15,7 @@ use crate::ui::{
     components,
     input::{SecureTextField, TextField},
     theme,
+    window::{SettingsSizeClass, WindowPolicy},
 };
 
 #[derive(Clone)]
@@ -204,8 +205,10 @@ impl SettingsWindowState {
 }
 
 impl Render for SettingsWindow {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let config = self.state.lock().unwrap().config.clone();
+        let stacked = WindowPolicy::settings_size_class(window.bounds().size.width)
+            == SettingsSizeClass::Stacked;
 
         // Update input entities when selected provider changes
         let selected_id = config.selected_provider_id.clone();
@@ -287,14 +290,24 @@ impl Render for SettingsWindow {
                     .flex_1()
                     .overflow_hidden()
                     .child(settings_navigation(config.active_settings_section))
-                    .child(div().flex_1().p_6().child(settings_content(
-                        &self.state,
-                        &config,
-                        self.name_input.as_ref(),
-                        self.base_url_input.as_ref(),
-                        self.api_key_input.as_ref(),
-                        self.model_input.as_ref(),
-                    ))),
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .min_h(px(0.))
+                            .id("settings-content-scroll")
+                            .overflow_y_scroll()
+                            .p_6()
+                            .child(settings_content(
+                                &self.state,
+                                &config,
+                                self.name_input.as_ref(),
+                                self.base_url_input.as_ref(),
+                                self.api_key_input.as_ref(),
+                                self.model_input.as_ref(),
+                                stacked,
+                            )),
+                    ),
             )
     }
 }
@@ -321,7 +334,7 @@ fn settings_header() -> AnyElement {
 
 fn settings_navigation(active: SettingsSection) -> AnyElement {
     div()
-        .w(px(240.))
+        .w(px(220.))
         .h_full()
         .bg(theme::surface())
         .border_r_1()
@@ -363,6 +376,7 @@ fn settings_content(
     base_url_input: Option<&Entity<TextField>>,
     api_key_input: Option<&Entity<SecureTextField>>,
     model_input: Option<&Entity<TextField>>,
+    stacked: bool,
 ) -> AnyElement {
     match config.active_settings_section {
         SettingsSection::AiProviders => ai_provider_pane(
@@ -372,6 +386,7 @@ fn settings_content(
             base_url_input,
             api_key_input,
             model_input,
+            stacked,
         ),
         section => settings_placeholder(section),
     }
@@ -384,9 +399,17 @@ fn ai_provider_pane(
     base_url_input: Option<&Entity<TextField>>,
     api_key_input: Option<&Entity<SecureTextField>>,
     model_input: Option<&Entity<TextField>>,
+    stacked: bool,
 ) -> AnyElement {
+    let provider_body = div().flex().gap_5();
+    let provider_body = if stacked {
+        provider_body.flex_col()
+    } else {
+        provider_body
+    };
+
     div()
-        .size_full()
+        .w_full()
         .flex()
         .flex_col()
         .gap_5()
@@ -420,10 +443,8 @@ fn ai_provider_pane(
                 })),
         )
         .child(
-            div()
-                .flex()
-                .gap_5()
-                .child(provider_list(state, config))
+            provider_body
+                .child(provider_list(state, config, stacked))
                 .child(provider_editor(
                     state,
                     config,
@@ -447,81 +468,90 @@ fn ai_provider_pane(
         .into_any_element()
 }
 
-fn provider_list(state: &Arc<Mutex<SettingsWindowState>>, config: &AppConfig) -> AnyElement {
-    div()
-        .w(px(360.))
+fn provider_list(
+    state: &Arc<Mutex<SettingsWindowState>>,
+    config: &AppConfig,
+    stacked: bool,
+) -> AnyElement {
+    let list = div()
         .rounded(px(10.))
         .border_1()
         .border_color(theme::border())
         .bg(theme::surface())
         .flex()
-        .flex_col()
-        .child(
-            div()
-                .px_4()
-                .py_3()
-                .border_b_1()
-                .border_color(theme::border())
-                .child(components::section_title("提供商")),
-        )
-        .children(config.providers.iter().map(|provider| {
-            let selected = config.selected_provider_id.as_deref() == Some(provider.id.as_str());
-            let provider_id = provider.id.clone();
-            div()
-                .px_4()
-                .py_3()
-                .border_b_1()
-                .border_color(theme::border())
-                .bg(if selected {
-                    theme::surface_tint()
-                } else {
-                    theme::surface()
-                })
-                .flex()
-                .flex_col()
-                .gap_2()
-                .id(SharedString::from(format!("provider-{}", provider_id)))
-                .cursor_pointer()
-                .on_click({
-                    let state = Arc::clone(state);
-                    let provider_id = provider_id.clone();
-                    move |_, _, _| {
-                        let mut guard = state.lock().unwrap();
-                        guard.config.selected_provider_id = Some(provider_id.clone());
-                    }
-                })
-                .child(
-                    div()
-                        .flex()
-                        .justify_between()
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .child(
-                                    div()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .child(provider.name.clone()),
-                                )
-                                .child(if provider.is_default {
-                                    components::pill("默认", true)
-                                } else {
-                                    components::pill("候选", false)
-                                }),
-                        )
-                        .child(components::pill(provider.protocol.label(), false)),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .justify_between()
-                        .child(components::label(provider.model.clone()))
-                        .child(status_label(provider.status)),
-                )
-                .child(model_list(config, provider.id.as_str()))
-        }))
-        .into_any_element()
+        .flex_col();
+    let list = if stacked {
+        list.w_full()
+    } else {
+        list.w(px(360.))
+    };
+
+    list.child(
+        div()
+            .px_4()
+            .py_3()
+            .border_b_1()
+            .border_color(theme::border())
+            .child(components::section_title("提供商")),
+    )
+    .children(config.providers.iter().map(|provider| {
+        let selected = config.selected_provider_id.as_deref() == Some(provider.id.as_str());
+        let provider_id = provider.id.clone();
+        div()
+            .px_4()
+            .py_3()
+            .border_b_1()
+            .border_color(theme::border())
+            .bg(if selected {
+                theme::surface_tint()
+            } else {
+                theme::surface()
+            })
+            .flex()
+            .flex_col()
+            .gap_2()
+            .id(SharedString::from(format!("provider-{}", provider_id)))
+            .cursor_pointer()
+            .on_click({
+                let state = Arc::clone(state);
+                let provider_id = provider_id.clone();
+                move |_, _, _| {
+                    let mut guard = state.lock().unwrap();
+                    guard.config.selected_provider_id = Some(provider_id.clone());
+                }
+            })
+            .child(
+                div()
+                    .flex()
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .child(provider.name.clone()),
+                            )
+                            .child(if provider.is_default {
+                                components::pill("默认", true)
+                            } else {
+                                components::pill("候选", false)
+                            }),
+                    )
+                    .child(components::pill(provider.protocol.label(), false)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .justify_between()
+                    .child(components::label(provider.model.clone()))
+                    .child(status_label(provider.status)),
+            )
+            .child(model_list(config, provider.id.as_str()))
+    }))
+    .into_any_element()
 }
 
 fn status_label(status: crate::config::ProviderConfigStatus) -> AnyElement {
