@@ -233,6 +233,7 @@ fn sidebar_drawer(state: &NormaAppState) -> AnyElement {
     div()
         .id(SharedString::from("sidebar-drawer"))
         .debug_selector(|| "sidebar-drawer".to_string())
+        .occlude()
         .absolute()
         .top(theme::TOOLBAR_HEIGHT)
         .bottom(px(0.))
@@ -249,6 +250,7 @@ fn inspector_drawer(state: &NormaAppState) -> AnyElement {
     div()
         .id(SharedString::from("inspector-drawer"))
         .debug_selector(|| "inspector-drawer".to_string())
+        .occlude()
         .absolute()
         .top(theme::TOOLBAR_HEIGHT)
         .bottom(px(0.))
@@ -300,6 +302,30 @@ mod tests {
     use gpui::{AppContext, Modifiers, TestAppContext, size};
 
     use super::*;
+
+    struct DrawerOcclusionTestView {
+        state: NormaAppState,
+        underlay_clicks: usize,
+    }
+
+    impl Render for DrawerOcclusionTestView {
+        fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .relative()
+                .size_full()
+                .child(
+                    div()
+                        .id("drawer-underlay")
+                        .absolute()
+                        .size_full()
+                        .on_click(cx.listener(|view, _, _, _| {
+                            view.underlay_clicks += 1;
+                        })),
+                )
+                .child(sidebar_drawer(&self.state))
+                .child(inspector_drawer(&self.state))
+        }
+    }
 
     fn shell() -> AppShell {
         let (_updates_tx, updates_rx) = mpsc::channel();
@@ -395,6 +421,39 @@ mod tests {
         assert!(
             cx.debug_bounds("inspector-drawer").is_some(),
             "inspector drawer should be rendered after clicking its toggle"
+        );
+    }
+
+    #[gpui::test]
+    fn overlay_drawers_block_clicks_from_reaching_the_underlay(cx: &mut TestAppContext) {
+        let (view, cx) = cx.add_window_view(|_, _| DrawerOcclusionTestView {
+            state: NormaAppState::no_project(),
+            underlay_clicks: 0,
+        });
+
+        cx.simulate_resize(size(px(1024.), px(700.)));
+        cx.run_until_parked();
+
+        let sidebar_bounds = cx
+            .debug_bounds("sidebar-drawer")
+            .expect("sidebar drawer should have debug bounds");
+        cx.simulate_click(sidebar_bounds.center(), Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(
+            cx.read_entity(&view, |view, _| view.underlay_clicks),
+            0,
+            "sidebar drawer should occlude the underlay"
+        );
+
+        let inspector_bounds = cx
+            .debug_bounds("inspector-drawer")
+            .expect("inspector drawer should have debug bounds");
+        cx.simulate_click(inspector_bounds.center(), Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(
+            cx.read_entity(&view, |view, _| view.underlay_clicks),
+            0,
+            "inspector drawer should occlude the underlay"
         );
     }
 }
