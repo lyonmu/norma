@@ -1,15 +1,15 @@
 use std::sync::mpsc::Receiver;
 
 use gpui::{
-    App, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render, SharedString,
-    Styled, Window, WindowBounds, WindowOptions, div, point, prelude::*, px, size,
+    Context, Entity, IntoElement, ParentElement, Render, SharedString, Styled, Window, div,
+    prelude::*, px,
 };
 
 use crate::app::NormaAppState;
 use crate::runtime::RuntimeUpdate;
 use crate::ui::{
-    components, execution, input::ComposerInput, inspector, settings::SettingsWindow, sidebar,
-    theme,
+    components, execution, input::ComposerInput, inspector, sidebar, theme,
+    window::open_settings_window,
 };
 
 pub struct AppShell {
@@ -153,34 +153,11 @@ fn settings_button(state: &NormaAppState) -> impl IntoElement {
         .text_color(theme::text())
         .child("⚙")
         .on_click(move |_, _, cx| {
-            let options = WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                    point(px(180.), px(120.)),
-                    size(px(960.), px(720.)),
-                ))),
-                ..WindowOptions::default()
-            };
-            let config = config.clone();
-            cx.open_window(options, |_, cx| {
-                let config = config.clone();
-                let runtime_config = runtime_config.clone();
-                let config_file = config_file.clone();
-                cx.new(|_| SettingsWindow::new(config, runtime_config, config_file))
-            })
-            .expect("failed to open Norma settings window");
+            open_settings_window(
+                cx,
+                config.clone(),
+                runtime_config.clone(),
+                config_file.clone(),
+            );
         })
-}
-
-pub fn run(state: NormaAppState, updates: Receiver<RuntimeUpdate>) {
-    Application::new().run(move |cx: &mut App| {
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                point(px(80.), px(80.)),
-                size(px(1440.), px(1024.)),
-            ))),
-            ..WindowOptions::default()
-        };
-        cx.open_window(options, |_, cx| cx.new(|_| AppShell::new(state, updates)))
-            .expect("failed to open Norma window");
-    });
 }

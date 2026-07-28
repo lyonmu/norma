@@ -228,6 +228,17 @@ mod tests {
     }
 
     #[test]
+    fn main_options_use_the_configured_window_size() {
+        let config = WindowConfig {
+            width: 1500,
+            height: 900,
+        };
+        let options = WindowPolicy::main_window_options(Some(&config));
+
+        assert_eq!(windowed_bounds(&options).size, size(px(1500.), px(900.)));
+    }
+
+    #[test]
     fn settings_window_options_define_bounds_and_minimum_size() {
         let options = WindowPolicy::settings_window_options();
         let bounds = windowed_bounds(&options);
@@ -237,5 +248,12 @@ mod tests {
         assert_eq!(bounds.size, size(px(960.), px(720.)));
         assert_eq!(options.window_min_size, Some(size(px(840.), px(620.))));
         assert!(options.is_resizable);
+    }
+
+    #[test]
+    fn settings_options_keep_the_expected_initial_size() {
+        let options = WindowPolicy::settings_window_options();
+
+        assert_eq!(windowed_bounds(&options).size, size(px(960.), px(720.)));
     }
 }
