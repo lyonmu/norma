@@ -8,6 +8,12 @@ Compare against `docs/superpowers/specs/assets/norma-review-first-codex-workbenc
 ## Window Shell
 
 - [ ] Window opens near 1440x1024
+- [ ] Window cannot be resized below 1024x700
+- [ ] At 1280px and wider, sidebar and inspector are both inline
+- [ ] At 1120-1279px, sidebar is inline and inspector opens as an overlay drawer
+- [ ] At 1024-1119px, sidebar and inspector both open as overlay drawers
+- [ ] Compact toolbar keeps navigation, run, inspector, and settings actions reachable
+- [ ] Resizing between layout classes closes stale overlay drawers
 - [ ] Light native desktop surface (not dark)
 - [ ] White content surfaces on very light gray app background
 - [ ] Thin hairline dividers between toolbar, columns, and sections
@@ -27,6 +33,7 @@ Compare against `docs/superpowers/specs/assets/norma-review-first-codex-workbenc
 - [ ] File tree with directory/file icons and depth indentation
 - [ ] Git status card at bottom with branch, ahead/behind, and change counts
 - [ ] Git metrics use green for added, red for modified, muted for deleted
+- [ ] Sidebar content scrolls without moving the workbench toolbar
 
 ## Center Execution Stream
 
@@ -43,6 +50,7 @@ Compare against `docs/superpowers/specs/assets/norma-review-first-codex-workbenc
 - [ ] Enter submits composer content; Shift+Enter inserts a newline.
 - [ ] Empty composer content cannot submit.
 - [ ] Composer text does not overlap footer actions or resize the center pane unexpectedly.
+- [ ] Execution events scroll independently while the composer remains visible
 
 ## Right Inspector (410px)
 
@@ -57,6 +65,7 @@ Compare against `docs/superpowers/specs/assets/norma-review-first-codex-workbenc
 - [ ] File preview section with hunk summary and diff stats
 - [ ] Git operations section with disabled action cards (opacity ~0.65)
 - [ ] Disabled actions: 撤销, 丢弃, 外部编辑器
+- [ ] Inspector content scrolls without moving the inspector tabs
 
 ## Visual Qualities
 

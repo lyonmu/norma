@@ -15,6 +15,11 @@ Use this checklist when verifying `docs/superpowers/specs/2026-06-11-norma-ai-pr
 ## Settings Window
 
 - [ ] The settings window is light, compact, and consistent with the workbench visual language.
+- [ ] The settings window cannot be resized below 840x620.
+- [ ] At 920px and wider, the provider list and editor are side by side.
+- [ ] Below 920px, the provider list stacks above the editor.
+- [ ] Settings content scrolls without moving the header.
+- [ ] At 840x620, every provider field and action remains reachable.
 - [ ] The left navigation includes `通用`, `AI 提供商`, `运行环境`, `安全`, `Git`, and `外观`.
 - [ ] `AI 提供商` is selected with a soft blue tint.
 - [ ] The right pane title is `AI 提供商`.
